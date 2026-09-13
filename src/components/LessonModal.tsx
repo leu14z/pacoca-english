@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, Volume2, Snail, Mic, CheckCircle2, XCircle, Heart } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Volume2, Snail, Mic, CheckCircle2, XCircle, Heart, AlertCircle, RefreshCw } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { motion } from 'framer-motion';
 import type { Lesson, Exercise } from '../data/courses';
@@ -7,6 +7,7 @@ import { useUser } from '../context/UserContext';
 import { Mascot } from './Mascot';
 import { sound, speakEnglish } from '../utils/audio';
 import type { MascotMood } from '../utils/mascot';
+import { listenForPhrase, requestMicrophonePermission, isSpeechSupported } from '../utils/speech';
 
 interface LessonModalProps {
   lesson: Lesson;
@@ -14,7 +15,7 @@ interface LessonModalProps {
 }
 
 export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => {
-  const { activeUser, completeLesson, loseHeart } = useUser();
+  const { currentUser, completeLesson, loseHeart } = useUser();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [status, setStatus] = useState<'answering' | 'correct' | 'incorrect' | 'completed'>('answering');
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
@@ -22,22 +23,33 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
   const [availableWords, setAvailableWords] = useState<string[]>([]);
   const [matchedPairs, setMatchedPairs] = useState<string[]>([]);
   const [selectedPair, setSelectedPair] = useState<{ type: 'en' | 'pt'; text: string } | null>(null);
-  const [isListeningSpeech, setIsListeningSpeech] = useState(false);
-  const [speechTranscript, setSpeechTranscript] = useState('');
   const [combo, setCombo] = useState(0);
   const [mascotMood, setMascotMood] = useState<MascotMood>('official');
   const [mascotSpeech, setMascotSpeech] = useState<string | undefined>(undefined);
+
+  // Speech Recognition States
+  const [speechState, setSpeechState] = useState<'idle' | 'listening' | 'processing' | 'error' | 'done'>('idle');
+  const [speechMessage, setSpeechMessage] = useState<string>('');
+  const [spokenTranscript, setSpokenTranscript] = useState<string>('');
+  const abortSpeechRef = useRef<(() => void) | null>(null);
 
   const currentExercise: Exercise = lesson.exercises[currentIndex];
   const progressPercent = ((currentIndex) / lesson.exercises.length) * 100;
 
   // Initialize exercise state
   useEffect(() => {
-    if (!currentExercise) return;
+    if (!currentExercise || !currentUser) return;
     setStatus('answering');
     setSelectedAnswer(null);
     setSelectedPair(null);
-    setSpeechTranscript('');
+    setSpeechState('idle');
+    setSpeechMessage('');
+    setSpokenTranscript('');
+
+    if (abortSpeechRef.current) {
+      abortSpeechRef.current();
+      abortSpeechRef.current = null;
+    }
 
     if (currentExercise.type === 'word-bank' || currentExercise.type === 'listen-bank') {
       const words = [...(currentExercise.options || [])].sort(() => Math.random() - 0.5);
@@ -57,17 +69,28 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
     }
 
     // Set mood based on hearts or combo
-    if (activeUser.hearts <= 1) {
+    if (currentUser.hearts <= 1) {
       setMascotMood('scared');
-      setMascotSpeech('Cuidado, só resta 1 coração!');
+      setMascotSpeech('Cuidado, só resta 1 coraçãozinho!');
     } else if (combo >= 3) {
       setMascotMood('frenzy');
-      setMascotSpeech(`Frenesi! Combo x${combo}! 🔥`);
+      setMascotSpeech(`Modo Frenesi! Combo x${combo}! 🔥`);
     } else {
       setMascotMood('official');
       setMascotSpeech(currentExercise.tip);
     }
   }, [currentIndex]);
+
+  // Clean up speech on unmount
+  useEffect(() => {
+    return () => {
+      if (abortSpeechRef.current) {
+        abortSpeechRef.current();
+      }
+    };
+  }, []);
+
+  if (!currentUser) return null;
 
   // Handle word selection in word bank
   const handleWordSelect = (word: string, index: number) => {
@@ -123,53 +146,47 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
     }
   };
 
-  // Handle Speech Recognition
-  const handleSpeechRecord = () => {
-    const SpeechRecognition =
-      (window as unknown as { SpeechRecognition: any }).SpeechRecognition ||
-      (window as unknown as { webkitSpeechRecognition: any }).webkitSpeechRecognition;
+  // Handle Speech Recognition with explicit mic permission check
+  const handleSpeechRecord = async () => {
+    sound.playClick();
 
-    if (!SpeechRecognition) {
-      // Speech not supported, simulate pass
-      setSpeechTranscript(currentExercise.correctAnswer as string);
+    if (!isSpeechSupported()) {
+      setSpeechState('error');
+      setSpeechMessage('Seu navegador atual não suporta microfone direto. Você pode ouvir a pronúncia e praticar falando em voz alta!');
       return;
     }
 
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'en-US';
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
+    // Request permission explicitly first
+    const hasPermission = await requestMicrophonePermission();
+    if (!hasPermission) {
+      setSpeechState('error');
+      setSpeechMessage('Permissão de microfone negada. Clique no ícone de cadeado do navegador para permitir o microfone.');
+      return;
+    }
 
-    recognition.onstart = () => {
-      setIsListeningSpeech(true);
-      sound.playClick();
-    };
+    const targetPhrase = currentExercise.englishPhrase || (currentExercise.correctAnswer as string);
 
-    recognition.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript;
-      setSpeechTranscript(transcript);
-      setIsListeningSpeech(false);
+    if (abortSpeechRef.current) {
+      abortSpeechRef.current();
+    }
 
-      // Clean check
-      const cleanTranscript = transcript.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
-      const cleanExpected = (currentExercise.correctAnswer as string).toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
-
-      if (cleanTranscript === cleanExpected || cleanTranscript.includes(cleanExpected) || cleanExpected.includes(cleanTranscript)) {
-        handleSuccess();
-      } else {
-        handleFail();
+    abortSpeechRef.current = listenForPhrase(
+      targetPhrase,
+      (newStatus, msg) => {
+        setSpeechState(newStatus);
+        if (msg) setSpeechMessage(msg);
+      },
+      (result) => {
+        setSpokenTranscript(result.transcript);
+        if (result.isMatch) {
+          handleSuccess();
+        } else {
+          sound.playError();
+          setMascotMood('wrong');
+          setMascotSpeech('Não peguei perfeitamente. Ouça com atenção e tente falar de novo!');
+        }
       }
-    };
-
-    recognition.onerror = () => {
-      setIsListeningSpeech(false);
-    };
-
-    recognition.onend = () => {
-      setIsListeningSpeech(false);
-    };
-
-    recognition.start();
+    );
   };
 
   // Validate current answer
@@ -191,7 +208,7 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
           selectedWords.every((w, i) => w.toLowerCase().replace(/[^a-z0-9]/g, '') === expected[i].toLowerCase().replace(/[^a-z0-9]/g, ''));
       }
     } else if (currentExercise.type === 'speech') {
-      isCorrect = speechTranscript.length > 0;
+      isCorrect = spokenTranscript.length > 0;
     }
 
     if (isCorrect) {
@@ -238,7 +255,7 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
   };
 
   // When all hearts run out
-  if (activeUser.hearts <= 0 && status !== 'completed') {
+  if (currentUser.hearts <= 0 && status !== 'completed') {
     return (
       <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4">
         <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full text-center border-4 border-rose-300 shadow-2xl">
@@ -286,7 +303,7 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
             </div>
             <div className="bg-emerald-50 border-2 border-emerald-300 rounded-2xl p-4 text-center">
               <span className="text-xs font-black uppercase text-emerald-700 tracking-wider">Ofensiva</span>
-              <div className="text-3xl font-black text-emerald-600 mt-1">{activeUser.streak} dias 🔥</div>
+              <div className="text-3xl font-black text-emerald-600 mt-1">{currentUser.streak} dias 🔥</div>
             </div>
           </div>
         </div>
@@ -327,7 +344,7 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
         {/* Hearts */}
         <div className="flex items-center gap-1.5 text-rose-500 font-black text-lg">
           <Heart className="w-6 h-6 fill-rose-500 text-rose-500" />
-          <span>{activeUser.hearts}</span>
+          <span>{currentUser.hearts}</span>
         </div>
       </div>
 
@@ -475,55 +492,79 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
           </div>
         )}
 
-        {/* Exercise Type 4: Speech Practice */}
+        {/* Exercise Type 4: Speech Practice with Robust Microphone & Audio */}
         {currentExercise.type === 'speech' && (
-          <div className="text-center py-6 space-y-6">
+          <div className="text-center py-4 space-y-5">
             <div className="p-6 bg-sky-50 border-2 border-sky-200 rounded-3xl">
               <span className="text-xs font-black uppercase text-sky-600 tracking-wider block mb-2">
                 Fale esta frase em voz alta:
               </span>
-              <p className="text-2xl font-black text-slate-800 mb-2">
+              <p className="text-2xl font-black text-slate-800 mb-3">
                 "{currentExercise.englishPhrase}"
               </p>
               <button
                 onClick={() => speakEnglish(currentExercise.englishPhrase!)}
-                className="inline-flex items-center gap-2 text-sky-600 hover:text-sky-700 font-bold text-sm"
+                className="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-sky-300 rounded-xl text-sky-700 hover:bg-sky-100 font-bold text-xs cursor-pointer transition-colors shadow-2xs"
               >
                 <Volume2 className="w-4 h-4" />
-                Ouvir pronúncia correta
+                <span>Ouvir pronúncia nativa</span>
               </button>
             </div>
 
+            {/* Microphone Button with Dynamic States */}
             <div className="flex flex-col items-center">
               <button
                 onClick={handleSpeechRecord}
-                className={`w-24 h-24 rounded-full flex items-center justify-center cursor-pointer transition-all ${
-                  isListeningSpeech
-                    ? 'bg-rose-500 animate-ping text-white'
+                className={`w-24 h-24 rounded-full flex items-center justify-center cursor-pointer transition-all shadow-lg ${
+                  speechState === 'listening'
+                    ? 'bg-rose-500 animate-pulse text-white scale-110'
+                    : speechState === 'processing'
+                    ? 'bg-amber-500 text-white'
                     : 'btn-3d-blue'
                 }`}
               >
-                <Mic className="w-10 h-10" />
+                {speechState === 'processing' ? (
+                  <RefreshCw className="w-10 h-10 animate-spin" />
+                ) : (
+                  <Mic className="w-10 h-10" />
+                )}
               </button>
-              <span className="text-slate-500 font-bold text-sm mt-3">
-                {isListeningSpeech ? 'Ouvindo... Pode falar!' : 'Toque no microfone para falar'}
+
+              <span className="text-slate-700 font-black text-sm mt-3">
+                {speechState === 'listening'
+                  ? '🎙️ Gravando... Fale a frase agora!'
+                  : speechState === 'processing'
+                  ? 'Avaliando pronúncia...'
+                  : 'Toque no microfone para falar'}
               </span>
-              {speechTranscript && (
-                <p className="mt-2 text-sm font-extrabold text-slate-700 bg-slate-100 px-3 py-1 rounded-xl">
-                  Você falou: "{speechTranscript}"
+
+              {/* Spoken result or message */}
+              {spokenTranscript && (
+                <p className="mt-2 text-sm font-extrabold text-slate-800 bg-slate-100 px-4 py-1.5 rounded-xl border border-slate-200">
+                  Você disse: "{spokenTranscript}"
                 </p>
+              )}
+
+              {/* Error Message with Help */}
+              {speechMessage && speechState === 'error' && (
+                <div className="mt-3 p-3 bg-amber-50 border border-amber-300 rounded-2xl max-w-sm text-xs text-amber-900 font-bold flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
+                  <span>{speechMessage}</span>
+                </div>
               )}
             </div>
 
-            <button
-              onClick={() => {
-                sound.playClick();
-                handleSuccess();
-              }}
-              className="text-xs text-slate-400 hover:text-slate-600 underline font-bold cursor-pointer"
-            >
-              Não posso falar agora (Pular)
-            </button>
+            <div className="pt-2">
+              <button
+                onClick={() => {
+                  sound.playClick();
+                  handleSuccess();
+                }}
+                className="text-xs text-slate-400 hover:text-slate-600 underline font-bold cursor-pointer"
+              >
+                Não posso falar agora / Continuar
+              </button>
+            </div>
           </div>
         )}
 

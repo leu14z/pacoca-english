@@ -1,12 +1,17 @@
 import React, { useState } from 'react';
-import { Heart, Send, Award, CheckCircle2, Clock, MessageSquareHeart } from 'lucide-react';
+import { Heart, Send, Award, CheckCircle2, Clock, MessageSquareHeart, Copy, Link2, Check } from 'lucide-react';
 import { useUser } from '../context/UserContext';
 import { Mascot } from './Mascot';
 import { sound } from '../utils/audio';
 
 export const CoupleDashboard: React.FC = () => {
-  const { activeUser, otherUser, coupleStats, sendCoupleNudge, clearNudge } = useUser();
+  const { currentUser, partner, coupleStats, sendCoupleNudge, clearNudge, linkPartnerCode } = useUser();
+  const [partnerCodeInput, setPartnerCodeInput] = useState('');
+  const [codeCopied, setCodeCopied] = useState(false);
+  const [linkSuccess, setLinkSuccess] = useState(false);
   const [nudgeSent, setNudgeSent] = useState(false);
+
+  if (!currentUser) return null;
 
   const presets = [
     'Amor, bora treinar hoje pro Paçoca não ficar triste! 🐾❤️',
@@ -22,9 +27,26 @@ export const CoupleDashboard: React.FC = () => {
     setTimeout(() => setNudgeSent(false), 3000);
   };
 
-  const bryanUser = activeUser.id === 'bryan' ? activeUser : otherUser;
-  const partnerUser = activeUser.id === 'partner' ? activeUser : otherUser;
-  const bothDone = bryanUser.completedToday && partnerUser.completedToday;
+  const handleCopyCode = () => {
+    sound.playClick();
+    navigator.clipboard.writeText(currentUser.coupleCode);
+    setCodeCopied(true);
+    setTimeout(() => setCodeCopied(false), 2500);
+  };
+
+  const handleLinkPartner = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!partnerCodeInput.trim()) return;
+    const ok = linkPartnerCode(partnerCodeInput);
+    if (ok) {
+      sound.playSuccess();
+      setLinkSuccess(true);
+      setPartnerCodeInput('');
+      setTimeout(() => setLinkSuccess(false), 3000);
+    }
+  };
+
+  const bothDone = currentUser.completedToday && (partner?.completedToday || false);
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 pb-20">
@@ -70,7 +92,7 @@ export const CoupleDashboard: React.FC = () => {
             <p className="text-pink-100 text-sm sm:text-base font-bold max-w-md">
               {bothDone
                 ? 'Os dois já treinaram hoje! A chama do casal está brilhando forte!'
-                : 'Para a ofensiva de hoje contar, os dois precisam praticar pelo menos 1 lição!'}
+                : 'Para a ofensiva de hoje contar, os dois precisam praticar pelo menos 1 lição cada um no seu celular!'}
             </p>
           </div>
 
@@ -85,12 +107,12 @@ export const CoupleDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Couple Status Cards */}
+      {/* Couple Status Cards (You vs Your Partner) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {/* Bryan Card */}
+        {/* Your Card */}
         <div
           className={`p-5 rounded-3xl border-2 transition-all ${
-            bryanUser.completedToday
+            currentUser.completedToday
               ? 'bg-emerald-50 border-emerald-300'
               : 'bg-white border-slate-200'
           }`}
@@ -98,18 +120,18 @@ export const CoupleDashboard: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <img
-                src={bryanUser.avatar}
-                alt={bryanUser.name}
+                src={currentUser.avatar}
+                alt={currentUser.name}
                 className="w-12 h-12 rounded-full border-2 border-slate-300 object-cover"
               />
               <div>
-                <h4 className="font-black text-slate-800 text-lg">{bryanUser.name}</h4>
+                <h4 className="font-black text-slate-800 text-lg">{currentUser.name} (Você)</h4>
                 <span className="text-xs font-bold text-slate-500">
-                  {bryanUser.xp} XP • {bryanUser.streak} dias de ofensiva
+                  {currentUser.xp} XP • {currentUser.streak} dias de ofensiva
                 </span>
               </div>
             </div>
-            {bryanUser.completedToday ? (
+            {currentUser.completedToday ? (
               <span className="flex items-center gap-1 px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded-full font-black text-xs">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Feito!
               </span>
@@ -123,7 +145,7 @@ export const CoupleDashboard: React.FC = () => {
           <div className="w-full bg-slate-200 h-3 rounded-full overflow-hidden">
             <div
               className="bg-emerald-500 h-full rounded-full transition-all"
-              style={{ width: bryanUser.completedToday ? '100%' : '35%' }}
+              style={{ width: currentUser.completedToday ? '100%' : '40%' }}
             />
           </div>
         </div>
@@ -131,7 +153,7 @@ export const CoupleDashboard: React.FC = () => {
         {/* Partner Card */}
         <div
           className={`p-5 rounded-3xl border-2 transition-all ${
-            partnerUser.completedToday
+            partner?.completedToday
               ? 'bg-emerald-50 border-emerald-300'
               : 'bg-white border-slate-200'
           }`}
@@ -139,18 +161,18 @@ export const CoupleDashboard: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <img
-                src={partnerUser.avatar}
-                alt={partnerUser.name}
+                src={partner?.avatar || './mascot/certinho.png'}
+                alt={partner?.name || 'Seu Amor'}
                 className="w-12 h-12 rounded-full border-2 border-slate-300 object-cover"
               />
               <div>
-                <h4 className="font-black text-slate-800 text-lg">{partnerUser.name}</h4>
+                <h4 className="font-black text-slate-800 text-lg">{partner?.name || 'Seu Amor ❤️'}</h4>
                 <span className="text-xs font-bold text-slate-500">
-                  {partnerUser.xp} XP • {partnerUser.streak} dias de ofensiva
+                  {partner?.xp || 0} XP • {partner?.streak || 0} dias de ofensiva
                 </span>
               </div>
             </div>
-            {partnerUser.completedToday ? (
+            {partner?.completedToday ? (
               <span className="flex items-center gap-1 px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded-full font-black text-xs">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Feito!
               </span>
@@ -164,10 +186,69 @@ export const CoupleDashboard: React.FC = () => {
           <div className="w-full bg-slate-200 h-3 rounded-full overflow-hidden">
             <div
               className="bg-emerald-500 h-full rounded-full transition-all"
-              style={{ width: partnerUser.completedToday ? '100%' : '30%' }}
+              style={{ width: partner?.completedToday ? '100%' : '30%' }}
             />
           </div>
         </div>
+      </div>
+
+      {/* Duo Link / Couple Code Box */}
+      <div className="bg-white border-2 border-slate-200 rounded-3xl p-6 shadow-sm space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-sky-100 flex items-center justify-center text-sky-600">
+            <Link2 className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="font-fredoka text-xl text-slate-800 font-bold">
+              Conexão de Casal (Duo Link)
+            </h3>
+            <p className="text-slate-500 font-semibold text-xs">
+              Conecte o seu celular com o celular da sua namorada.
+            </p>
+          </div>
+        </div>
+
+        {/* Your Code display */}
+        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div>
+            <span className="text-xs font-black uppercase text-slate-400 block mb-1">
+              Seu Código de Casal para enviar a ela:
+            </span>
+            <div className="font-mono text-xl font-black text-slate-800 tracking-wider">
+              {currentUser.coupleCode}
+            </div>
+          </div>
+          <button
+            onClick={handleCopyCode}
+            className="w-full sm:w-auto px-4 py-2.5 bg-white border-2 border-slate-300 rounded-xl font-black text-xs text-slate-700 flex items-center justify-center gap-2 hover:bg-slate-100 cursor-pointer"
+          >
+            {codeCopied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+            <span>{codeCopied ? 'Copiado!' : 'Copiar Código'}</span>
+          </button>
+        </div>
+
+        {/* Connect Partner Code Input */}
+        <form onSubmit={handleLinkPartner} className="flex flex-col sm:flex-row gap-2">
+          <input
+            type="text"
+            placeholder="Cole o código dela aqui (ex: AMOR-2026)"
+            value={partnerCodeInput}
+            onChange={(e) => setPartnerCodeInput(e.target.value)}
+            className="flex-1 px-4 py-2.5 bg-slate-50 border-2 border-slate-200 rounded-xl text-sm font-bold uppercase focus:outline-hidden focus:border-sky-500"
+          />
+          <button
+            type="submit"
+            className="py-2.5 px-5 btn-3d-blue rounded-xl font-black text-xs sm:text-sm cursor-pointer"
+          >
+            Vincular Par
+          </button>
+        </form>
+
+        {linkSuccess && (
+          <p className="text-emerald-600 font-bold text-xs bg-emerald-50 p-2 rounded-xl border border-emerald-200 text-center">
+            Par vinculado com sucesso! Agora os dois estão sincronizados! ✨
+          </p>
+        )}
       </div>
 
       {/* Send Nudge / "Cutucada do Paçoca" */}

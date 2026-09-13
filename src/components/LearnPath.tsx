@@ -11,9 +11,11 @@ interface LearnPathProps {
 }
 
 export const LearnPath: React.FC<LearnPathProps> = ({ onStartLesson }) => {
-  const { activeUser } = useUser();
+  const { currentUser } = useUser();
 
-  const isLessonCompleted = (id: string) => activeUser.completedLessons.includes(id);
+  if (!currentUser) return null;
+
+  const isLessonCompleted = (id: string) => currentUser.completedLessons.includes(id);
 
   // An offset pattern for the Duolingo winding path
   const getOffsetClass = (index: number) => {

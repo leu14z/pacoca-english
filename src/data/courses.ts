@@ -11,13 +11,13 @@ export type ExerciseType =
 export interface Exercise {
   id: string;
   type: ExerciseType;
-  prompt: string;           // E.g. "Traduza esta frase" or "Ouça e monte a frase"
-  englishPhrase?: string;   // The English phrase (for speech / listening / reference)
-  portuguesePhrase?: string;// The PT phrase
-  options?: string[];       // Word tiles for word-bank or choices
-  correctAnswer: string | string[]; // Expected string or ordered array
-  audioText?: string;       // Text to read in English
-  tip?: string;             // Grammar tip from Paçoca
+  prompt: string;
+  englishPhrase?: string;
+  portuguesePhrase?: string;
+  options?: string[];
+  correctAnswer: string | string[];
+  audioText?: string;
+  tip?: string;
   pairItems?: { en: string; pt: string }[];
   dialogueLines?: { speaker: string; avatar?: string; text: string; translation: string }[];
 }
@@ -34,7 +34,7 @@ export interface Unit {
   id: string;
   title: string;
   subtitle: string;
-  color: string; // Tailwind color theme (green, blue, amber, purple)
+  color: string;
   lessons: Lesson[];
 }
 
@@ -47,8 +47,8 @@ export const COURSE_UNITS: Unit[] = [
     lessons: [
       {
         id: 'lesson-1-1',
-        title: 'Oi, Tudo Bem? (Greetings)',
-        description: 'Aprenda a se apresentar com naturalidade.',
+        title: 'Oi, Tudo Bem? (Greetings & Intro)',
+        description: 'Aprenda a se apresentar com naturalidade e confiança.',
         xpReward: 15,
         exercises: [
           {
@@ -67,11 +67,11 @@ export const COURSE_UNITS: Unit[] = [
           {
             id: 'u1-e2',
             type: 'word-bank',
-            prompt: 'Traduza para o inglês: "Meu nome é Bryan"',
-            portuguesePhrase: 'Meu nome é Bryan',
-            options: ['My', 'name', 'is', 'Bryan', 'Her', 'dog', 'are'],
-            correctAnswer: ['My', 'name', 'is', 'Bryan'],
-            audioText: 'My name is Bryan',
+            prompt: 'Traduza para o inglês: "Meu nome é Leo"',
+            portuguesePhrase: 'Meu nome é Leo',
+            options: ['My', 'name', 'is', 'Leo', 'Her', 'dog', 'are'],
+            correctAnswer: ['My', 'name', 'is', 'Leo'],
+            audioText: 'My name is Leo',
           },
           {
             id: 'u1-e3',
@@ -109,7 +109,7 @@ export const COURSE_UNITS: Unit[] = [
       {
         id: 'lesson-1-2',
         title: 'Café & Restaurante (Ordering Food)',
-        description: 'Peça cafés, sobremesas e comidas sem gaguejar.',
+        description: 'Peça cafés, sobremesas e refeições sem gaguejar.',
         xpReward: 20,
         exercises: [
           {
@@ -127,13 +127,13 @@ export const COURSE_UNITS: Unit[] = [
             type: 'dialogue',
             prompt: 'Leia o diálogo na cafeteria e responda:',
             dialogueLines: [
-              { speaker: 'Barista', text: 'Hi! What can I get started for you today?', translation: 'Olá! O que posso começar para vocês hoje?' },
-              { speaker: 'Bryan', text: 'A table for two and two iced lattes, please!', translation: 'Uma mesa para dois e dois lattes gelados, por favor!' },
-              { speaker: 'Barista', text: 'Sure thing! Dine in or to go?', translation: 'Com certeza! Comer aqui ou para viagem?' },
+              { speaker: 'Barista', text: 'Hi! What can I get started for you today?', translation: 'Olá! O que posso preparar para vocês hoje?' },
+              { speaker: 'Leo', text: 'A table for two and two iced lattes, please!', translation: 'Uma mesa para dois e dois cafés gelados, por favor!' },
+              { speaker: 'Barista', text: 'Sure thing! Dine in or to go?', translation: 'Com certeza! Para tomar aqui ou para viagem?' },
             ],
-            options: ['Bryan pediu água gelada', 'Bryan pediu uma mesa para dois e dois cafés gelados', 'O café estava fechado'],
-            correctAnswer: 'Bryan pediu uma mesa para dois e dois cafés gelados',
-            tip: '"Dine in or to go?" é a clássica pergunta de cafeteria no exterior!',
+            options: ['Leo pediu água mineral', 'Leo pediu uma mesa para dois e dois cafés gelados', 'O café estava fechado'],
+            correctAnswer: 'Leo pediu uma mesa para dois e dois cafés gelados',
+            tip: '"Dine in or to go?" é a pergunta mais comum de cafeteria no exterior!',
           },
           {
             id: 'u1-e8',
@@ -169,7 +169,7 @@ export const COURSE_UNITS: Unit[] = [
       {
         id: 'lesson-2-1',
         title: 'Carinho & Conexão (Love & Compliments)',
-        description: 'Elogios e frases doces para treinar a dois.',
+        description: 'Elogios e frases práticas para treinar a dois.',
         xpReward: 20,
         exercises: [
           {
@@ -180,7 +180,7 @@ export const COURSE_UNITS: Unit[] = [
             options: ['You', 'look', 'so', 'amazing', 'today!', 'very', 'sad', 'are'],
             correctAnswer: ['You', 'look', 'so', 'amazing', 'today!'],
             audioText: 'You look so amazing today!',
-            tip: 'Use "You look amazing" para elogiar o visual de quem você ama!',
+            tip: 'Use "You look amazing" para elogiar quem você ama!',
           },
           {
             id: 'u2-e2',
@@ -237,8 +237,8 @@ export const COURSE_UNITS: Unit[] = [
             type: 'dialogue',
             prompt: 'Na imigração do aeroporto:',
             dialogueLines: [
-              { speaker: 'Officer', text: 'Good evening. What is the purpose of your visit?', translation: 'Boa noite. Qual o motivo da sua visita?' },
-              { speaker: 'Bryan', text: 'We are on vacation for two weeks!', translation: 'Estamos de férias por duas semanas!' },
+              { speaker: 'Officer', text: 'Good evening. What is the purpose of your visit?', translation: 'Boa noite. Qual o motivo da visita de vocês?' },
+              { speaker: 'Leo', text: 'We are on vacation for two weeks!', translation: 'Estamos de férias por duas semanas!' },
               { speaker: 'Officer', text: 'Wonderful. Welcome and enjoy your stay!', translation: 'Maravilha. Bem-vindos e aproveitem a estadia!' },
             ],
             options: ['Eles foram a trabalho', 'Eles estão de férias por duas semanas', 'Eles perderam o voo'],

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { UserProvider } from './context/UserContext';
+import { UserProvider, useUser } from './context/UserContext';
 import { Header } from './components/Header';
 import { Navigation } from './components/Navigation';
 import type { TabType } from './components/Navigation';
@@ -9,11 +9,18 @@ import { Leaderboard } from './components/Leaderboard';
 import { Quests } from './components/Quests';
 import { ProfileView } from './components/ProfileView';
 import { LessonModal } from './components/LessonModal';
+import { LoginScreen } from './components/LoginScreen';
 import type { Lesson } from './data/courses';
 
 const MainApp: React.FC = () => {
+  const { isAuthenticated, currentUser } = useUser();
   const [currentTab, setCurrentTab] = useState<TabType>('learn');
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
+
+  // If user is not logged in on this device, show Login Screen
+  if (!isAuthenticated || !currentUser) {
+    return <LoginScreen />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">

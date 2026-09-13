@@ -4,38 +4,40 @@ import { useUser } from '../context/UserContext';
 import { Mascot } from './Mascot';
 
 export const Quests: React.FC = () => {
-  const { activeUser } = useUser();
+  const { currentUser } = useUser();
+
+  if (!currentUser) return null;
 
   const quests = [
     {
       id: 'q1',
       title: 'Ganhe 20 XP hoje',
       desc: 'Complete lições para somar pontos.',
-      current: Math.min(activeUser.xp, 20),
+      current: Math.min(currentUser.xp, 20),
       total: 20,
       reward: 10,
       icon: Sparkles,
-      completed: activeUser.xp >= 20,
+      completed: currentUser.xp >= 20,
     },
     {
       id: 'q2',
       title: 'Ofensiva do Casal',
-      desc: 'Bryan e Namorada praticando juntos hoje!',
-      current: activeUser.completedToday ? 1 : 0,
+      desc: 'Você e seu amor praticando juntos hoje!',
+      current: currentUser.completedToday ? 1 : 0,
       total: 1,
       reward: 20,
       icon: Flame,
-      completed: activeUser.completedToday,
+      completed: currentUser.completedToday,
     },
     {
       id: 'q3',
       title: 'Pratique 1 Lição de Voz',
       desc: 'Use o microfone para treinar sua pronúncia nativa.',
-      current: activeUser.completedLessons.length > 0 ? 1 : 0,
+      current: currentUser.completedLessons.length > 0 ? 1 : 0,
       total: 1,
       reward: 15,
       icon: Mic,
-      completed: activeUser.completedLessons.length > 0,
+      completed: currentUser.completedLessons.length > 0,
     },
   ];
 
