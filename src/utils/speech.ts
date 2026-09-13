@@ -1,8 +1,10 @@
-// Bulletproof Audio & Speech Engine for Paçoca English
-// Combines Web Speech API with Web Audio API Analyzer to guarantee the mic never dies abruptly!
+// Accurate Speech Recognition & Audio Evaluation Engine for Paçoca English
 
-export interface VoiceRecordingSession {
-  stop: () => void;
+export interface SpeechEvaluationResult {
+  transcript: string;
+  isMatch: boolean;
+  score: number; // 0 - 100%
+  feedback: string;
 }
 
 export function cleanSpokenText(text: string): string {
@@ -14,166 +16,223 @@ export function cleanSpokenText(text: string): string {
     .trim();
 }
 
+function levenshteinDistance(s1: string, s2: string): number {
+  const len1 = s1.length;
+  const len2 = s2.length;
+  const d: number[][] = [];
+
+  for (let i = 0; i <= len1; i++) {
+    d[i] = [i];
+  }
+  for (let j = 0; j <= len2; j++) {
+    d[0][j] = j;
+  }
+
+  for (let i = 1; i <= len1; i++) {
+    for (let j = 1; j <= len2; j++) {
+      const cost = s1[i - 1] === s2[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(
+        d[i - 1][j] + 1,      // deletion
+        d[i][j - 1] + 1,      // insertion
+        d[i - 1][j - 1] + cost // substitution
+      );
+    }
+  }
+
+  return d[len1][len2];
+}
+
 /**
- * Starts microphone recording with live audio level visualization.
- * Will NOT close prematurely. Remains open until user stops or 7s timeout.
+ * Strict evaluation between expected phrase and what user actually spoke.
+ * Rejects silence, random words, partial words, or gibberish.
  */
-export async function startRobustVoiceSession(
-  expectedPhrase: string,
-  onVolumeChange: (volume: number) => void,
-  onLiveText: (text: string) => void,
-  onComplete: (isMatch: boolean, spokenText: string) => void,
-  onError: (errorMessage: string) => void
-): Promise<VoiceRecordingSession> {
-  let stream: MediaStream | null = null;
-  let audioCtx: AudioContext | null = null;
-  let recognition: any = null;
-  let animId: number = 0;
-  let isDone = false;
-  let capturedTranscript = '';
+export function evaluateSpokenMatch(expectedPhrase: string, spokenText: string): { isMatch: boolean; score: number; feedback: string } {
+  const cleanExpected = cleanSpokenText(expectedPhrase);
+  const cleanSpoken = cleanSpokenText(spokenText);
 
-  // 1. Request REAL microphone stream
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      },
-    });
-  } catch (err: any) {
-    console.warn('Microphone access failed:', err);
-    onError(
-      err.name === 'NotAllowedError'
-        ? 'Permissão do microfone negada. Clique no ícone de cadeado do navegador para permitir o microfone.'
-        : 'Microfone não encontrado ou não acessível.'
-    );
-    return { stop: () => {} };
-  }
-
-  // 2. Set up Web Audio Analyser for live visual feedback
-  try {
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    audioCtx = new AudioContextClass();
-    const source = audioCtx.createMediaStreamSource(stream);
-    const analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 64;
-    source.connect(analyser);
-
-    const dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-    const checkVolume = () => {
-      if (isDone) return;
-      analyser.getByteFrequencyData(dataArray);
-      let sum = 0;
-      for (let i = 0; i < dataArray.length; i++) {
-        sum += dataArray[i];
-      }
-      const avg = sum / dataArray.length;
-      onVolumeChange(Math.min(100, Math.round((avg / 128) * 100)));
-      animId = requestAnimationFrame(checkVolume);
+  if (!cleanSpoken || cleanSpoken.length < 2) {
+    return {
+      isMatch: false,
+      score: 0,
+      feedback: 'Nenhuma fala audível detectada. Toque no microfone e pronuncie com clareza.',
     };
-    checkVolume();
-  } catch (e) {
-    console.warn('AudioContext volume meter unavailable:', e);
   }
 
-  // 3. Set up Speech Recognition in parallel (if browser supports it)
+  // Exact match
+  if (cleanSpoken === cleanExpected) {
+    return { isMatch: true, score: 100, feedback: `Pronúncia perfeita! Você disse exatamente "${expectedPhrase}".` };
+  }
+
+  const expectedWords = cleanExpected.split(' ').filter(Boolean);
+  const spokenWords = cleanSpoken.split(' ').filter(Boolean);
+
+  // If user said far too few words (e.g. 1 word when expected 4)
+  if (spokenWords.length === 0) {
+    return {
+      isMatch: false,
+      score: 0,
+      feedback: `Você não disse a frase esperada. Tente falar "${expectedPhrase}".`,
+    };
+  }
+
+  // Strict word-by-word evaluation using Levenshtein distance
+  let matchedWordScores: number[] = [];
+  const usedSpokenIndices = new Set<number>();
+
+  for (const exp of expectedWords) {
+    let bestScore = 0;
+    let bestIdx = -1;
+
+    for (let i = 0; i < spokenWords.length; i++) {
+      if (usedSpokenIndices.has(i)) continue;
+      const spk = spokenWords[i];
+
+      if (spk === exp) {
+        bestScore = 1.0;
+        bestIdx = i;
+        break;
+      }
+
+      // Allow 1 typo for words of length >= 4, or 2 typos for words of length >= 7
+      const dist = levenshteinDistance(exp, spk);
+      const maxAllowedDist = exp.length >= 7 ? 2 : exp.length >= 4 ? 1 : 0;
+
+      if (dist <= maxAllowedDist) {
+        const similarity = 1 - (dist / Math.max(exp.length, spk.length));
+        if (similarity > bestScore) {
+          bestScore = similarity;
+          bestIdx = i;
+        }
+      }
+    }
+
+    if (bestIdx >= 0 && bestScore >= 0.75) {
+      usedSpokenIndices.add(bestIdx);
+      matchedWordScores.push(bestScore);
+    } else {
+      matchedWordScores.push(0);
+    }
+  }
+
+  const totalMatchedScore = matchedWordScores.reduce((acc, s) => acc + s, 0);
+  const recall = totalMatchedScore / expectedWords.length;
+  const precision = totalMatchedScore / spokenWords.length;
+
+  // Harmonic mean (F1 score)
+  const f1 = (precision + recall > 0) ? (2 * precision * recall) / (precision + recall) : 0;
+  const finalScore = Math.round(f1 * 100);
+
+  // Stricter threshold: must have matched at least 70% of expected words AND not babble unrelated words
+  if (finalScore >= 70 && recall >= 0.70) {
+    return {
+      isMatch: true,
+      score: finalScore,
+      feedback: `Muito bom! Compreendido: "${spokenText}" (${finalScore}% de precisão).`,
+    };
+  }
+
+  // Incorrect pronunciation or wrong phrase
+  return {
+    isMatch: false,
+    score: finalScore,
+    feedback: `Você disse "${spokenText}", mas a frase correta é "${expectedPhrase}".`,
+  };
+}
+
+export interface SpeechSession {
+  stop: () => void;
+}
+
+/**
+ * Starts standard Web Speech recognition WITHOUT hijacking device audio with getUserMedia.
+ * Directly streams to speech engine for fast, accurate word transcription.
+ */
+export function startAccurateSpeechRecognition(
+  expectedPhrase: string,
+  onInterimText: (text: string) => void,
+  onStatusChange: (status: 'listening' | 'evaluating' | 'error' | 'done', message?: string) => void,
+  onResult: (result: SpeechEvaluationResult) => void
+): SpeechSession {
   const SpeechRecognition =
     (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
-  if (SpeechRecognition) {
-    try {
-      recognition = new SpeechRecognition();
-      recognition.lang = 'en-US';
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.maxAlternatives = 3;
-
-      recognition.onresult = (event: any) => {
-        let interim = '';
-        let final = '';
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          const trans = event.results[i][0].transcript;
-          if (event.results[i].isFinal) final += trans;
-          else interim += trans;
-        }
-        const text = (final || interim).trim();
-        if (text) {
-          capturedTranscript = text;
-          onLiveText(text);
-        }
-      };
-
-      recognition.onerror = (e: any) => {
-        console.warn('SpeechRecognition non-fatal error:', e.error);
-        // Do NOT abort the whole session on speech recognition error; keep mic alive!
-      };
-
-      recognition.start();
-    } catch (e) {
-      console.warn('SpeechRecognition failed to start:', e);
-    }
+  if (!SpeechRecognition) {
+    onStatusChange('error', 'Seu navegador não suporta reconhecimento de voz direto.');
+    return { stop: () => {} };
   }
 
-  // 4. Finish and evaluate function
-  const finishSession = () => {
-    if (isDone) return;
-    isDone = true;
-    cancelAnimationFrame(animId);
+  const recognition = new SpeechRecognition();
+  recognition.lang = 'en-US';
+  recognition.continuous = false; // Capture phrase cleanly until pause
+  recognition.interimResults = true; // Real-time feedback
+  recognition.maxAlternatives = 3;
 
-    if (recognition) {
-      try {
-        recognition.stop();
-      } catch {}
-    }
+  let finalTranscript = '';
+  let stopped = false;
+  let resultEmitted = false;
 
-    if (stream) {
-      stream.getTracks().forEach((track) => track.stop());
-    }
-
-    if (audioCtx && audioCtx.state !== 'closed') {
-      try {
-        audioCtx.close();
-      } catch {}
-    }
-
-    onVolumeChange(0);
-
-    // Evaluate result
-    const cleanExpected = cleanSpokenText(expectedPhrase);
-    const cleanSpoken = cleanSpokenText(capturedTranscript);
-
-    let isMatch = false;
-    if (cleanSpoken) {
-      if (cleanSpoken === cleanExpected || cleanSpoken.includes(cleanExpected) || cleanExpected.includes(cleanSpoken)) {
-        isMatch = true;
-      } else {
-        const expectedWords = cleanExpected.split(' ').filter(Boolean);
-        const spokenWords = cleanSpoken.split(' ').filter(Boolean);
-        const matched = expectedWords.filter((w) => spokenWords.includes(w));
-        if (expectedWords.length > 0 && matched.length / expectedWords.length >= 0.5) {
-          isMatch = true;
-        }
-      }
-    } else {
-      // If speech recognition didn't transcribe text but audio was recorded (mic worked)
-      capturedTranscript = expectedPhrase;
-      isMatch = true;
-    }
-
-    onComplete(isMatch, capturedTranscript || expectedPhrase);
+  recognition.onstart = () => {
+    onStatusChange('listening');
   };
 
-  // 5. Automatic safety stop after 6 seconds
-  const autoTimeout = setTimeout(() => {
-    finishSession();
-  }, 6000);
+  recognition.onresult = (event: any) => {
+    let interim = '';
+    for (let i = event.resultIndex; i < event.results.length; ++i) {
+      const trans = event.results[i][0].transcript;
+      if (event.results[i].isFinal) {
+        finalTranscript = trans;
+      } else {
+        interim += trans;
+      }
+    }
+    const currentText = (finalTranscript || interim).trim();
+    if (currentText) {
+      onInterimText(currentText);
+    }
+  };
+
+  recognition.onerror = (event: any) => {
+    console.warn('Speech recognition error:', event.error);
+    if (stopped) return;
+
+    if (event.error === 'not-allowed') {
+      onStatusChange('error', 'Permissão do microfone bloqueada no navegador. Clique no cadeado na barra de endereços para permitir.');
+    } else if (event.error === 'no-speech') {
+      onStatusChange('error', 'Nenhum som de voz detectado. Fale com firmeza perto do microfone.');
+    } else if (event.error !== 'aborted') {
+      onStatusChange('error', `Erro do microfone: ${event.error}. Tente novamente.`);
+    }
+  };
+
+  recognition.onend = () => {
+    if (resultEmitted || stopped) return;
+    resultEmitted = true;
+    onStatusChange('evaluating');
+
+    // Strict evaluation against expected phrase
+    const evaluation = evaluateSpokenMatch(expectedPhrase, finalTranscript);
+    onStatusChange('done');
+    onResult({
+      transcript: finalTranscript,
+      isMatch: evaluation.isMatch,
+      score: evaluation.score,
+      feedback: evaluation.feedback,
+    });
+  };
+
+  try {
+    recognition.start();
+  } catch (err) {
+    console.warn('Recognition start error:', err);
+    onStatusChange('error', 'Não foi possível iniciar o microfone. Verifique se o microfone está conectado.');
+  }
 
   return {
     stop: () => {
-      clearTimeout(autoTimeout);
-      finishSession();
+      stopped = true;
+      try {
+        recognition.stop();
+      } catch {}
     },
   };
 }

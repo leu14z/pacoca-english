@@ -7,8 +7,7 @@ import { useUser } from '../context/UserContext';
 import { Mascot } from './Mascot';
 import { sound, speakEnglish } from '../utils/audio';
 import type { MascotMood } from '../utils/mascot';
-import { startRobustVoiceSession } from '../utils/speech';
-import type { VoiceRecordingSession } from '../utils/speech';
+import { startAccurateSpeechRecognition, type SpeechSession, type SpeechEvaluationResult } from '../utils/speech';
 
 interface LessonModalProps {
   lesson: Lesson;
@@ -36,12 +35,12 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
   const [mascotMood, setMascotMood] = useState<MascotMood>('official');
   const [mascotSpeech, setMascotSpeech] = useState<string | undefined>(undefined);
 
-  // Robust Voice Session States
+  // Speech Recognition States
   const [isRecording, setIsRecording] = useState(false);
-  const [liveVolume, setLiveVolume] = useState(0);
-  const [speechError, setSpeechError] = useState('');
-  const [spokenTranscript, setSpokenTranscript] = useState('');
-  const voiceSessionRef = useRef<VoiceRecordingSession | null>(null);
+  const [speechStatusMsg, setSpeechStatusMsg] = useState('');
+  const [liveSpokenText, setLiveSpokenText] = useState('');
+  const [evaluationFeedback, setEvaluationFeedback] = useState<string | null>(null);
+  const speechSessionRef = useRef<SpeechSession | null>(null);
 
   const currentExercise: Exercise = exerciseList[currentIndex];
   const progressPercent = ((currentIndex) / exerciseList.length) * 100;
@@ -53,13 +52,13 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
     setSelectedAnswer(null);
     setSelectedPair(null);
     setIsRecording(false);
-    setLiveVolume(0);
-    setSpeechError('');
-    setSpokenTranscript('');
+    setSpeechStatusMsg('');
+    setLiveSpokenText('');
+    setEvaluationFeedback(null);
 
-    if (voiceSessionRef.current) {
-      voiceSessionRef.current.stop();
-      voiceSessionRef.current = null;
+    if (speechSessionRef.current) {
+      speechSessionRef.current.stop();
+      speechSessionRef.current = null;
     }
 
     if (currentExercise.type === 'word-bank' || currentExercise.type === 'listen-bank') {
@@ -98,8 +97,8 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
   // Clean up recording on unmount
   useEffect(() => {
     return () => {
-      if (voiceSessionRef.current) {
-        voiceSessionRef.current.stop();
+      if (speechSessionRef.current) {
+        speechSessionRef.current.stop();
       }
     };
   }, []);
@@ -160,43 +159,68 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
     }
   };
 
-  // Start robust voice recording
-  const handleStartVoice = async () => {
+  // Start accurate speech recognition
+  const handleStartSpeech = () => {
     sound.playClick();
     setIsRecording(true);
-    setSpeechError('');
-    setSpokenTranscript('');
+    setSpeechStatusMsg('');
+    setLiveSpokenText('');
+    setEvaluationFeedback(null);
 
-    const target = currentExercise.englishPhrase || (currentExercise.correctAnswer as string);
+    const targetPhrase = currentExercise.englishPhrase || (currentExercise.correctAnswer as string);
 
-    const session = await startRobustVoiceSession(
-      target,
-      (vol) => setLiveVolume(vol),
-      (liveText) => setSpokenTranscript(liveText),
-      (isMatch, finalSpoken) => {
-        setIsRecording(false);
-        setSpokenTranscript(finalSpoken);
-        if (isMatch) {
-          handleSuccess();
-        } else {
-          sound.playError();
-          setMascotMood('wrong');
-          setMascotSpeech('Pronúncia detectada! Vamos tentar mais uma vez para ficar perfeito!');
+    speechSessionRef.current = startAccurateSpeechRecognition(
+      targetPhrase,
+      (interim) => {
+        setLiveSpokenText(interim);
+      },
+      (newStatus, msg) => {
+        if (newStatus === 'listening') {
+          setIsRecording(true);
+          setSpeechStatusMsg('Ouvindo... Fale a frase agora!');
+        } else if (newStatus === 'evaluating') {
+          setIsRecording(false);
+          setSpeechStatusMsg('Avaliando pronúncia...');
+        } else if (newStatus === 'error') {
+          setIsRecording(false);
+          setSpeechStatusMsg(msg || 'Erro no microfone.');
+        } else if (newStatus === 'done') {
+          setIsRecording(false);
         }
       },
-      (errMsg) => {
+      (result: SpeechEvaluationResult) => {
         setIsRecording(false);
-        setSpeechError(errMsg);
+        setEvaluationFeedback(result.feedback);
+
+        if (result.isMatch) {
+          // Genuine match!
+          sound.playSuccess();
+          setStatus('correct');
+          setCombo((c) => c + 1);
+          setMascotMood('correct');
+          setMascotSpeech(`Sensacional! Pronúncia correta (${result.score}% de precisão)!`);
+        } else {
+          // FAILED! Reject and require retry
+          sound.playError();
+          loseHeart();
+          setStatus('incorrect');
+          setCombo(0);
+          setMascotMood('wrong');
+          setMascotSpeech(result.feedback);
+
+          // Add to review queue
+          if (!reviewQueue.some((q) => q.id === currentExercise.id)) {
+            setReviewQueue((prev) => [...prev, currentExercise]);
+          }
+        }
       }
     );
-
-    voiceSessionRef.current = session;
   };
 
-  const handleStopVoice = () => {
-    if (voiceSessionRef.current) {
-      voiceSessionRef.current.stop();
-      voiceSessionRef.current = null;
+  const handleStopSpeech = () => {
+    if (speechSessionRef.current) {
+      speechSessionRef.current.stop();
+      speechSessionRef.current = null;
     }
     setIsRecording(false);
   };
@@ -206,6 +230,8 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
     sound.playClick();
     setStatus('answering');
     setSelectedAnswer(null);
+    setLiveSpokenText('');
+    setEvaluationFeedback(null);
 
     if (currentExercise.type === 'word-bank' || currentExercise.type === 'listen-bank') {
       const words = [...(currentExercise.options || [])].sort(() => Math.random() - 0.5);
@@ -219,7 +245,7 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
     }
 
     setMascotMood('official');
-    setMascotSpeech('Bora lá! Agora vai dar certo!');
+    setMascotSpeech('Vamos lá! Tente de novo com calma!');
   };
 
   // Validate current answer
@@ -240,8 +266,6 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
           selectedWords.length === expected.length &&
           selectedWords.every((w, i) => w.toLowerCase().replace(/[^a-z0-9]/g, '') === expected[i].toLowerCase().replace(/[^a-z0-9]/g, ''));
       }
-    } else if (currentExercise.type === 'speech') {
-      isCorrect = spokenTranscript.length > 0;
     }
 
     if (isCorrect) {
@@ -547,7 +571,7 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
           </div>
         )}
 
-        {/* Exercise Type 4: Speech Practice with Live Audio Meter */}
+        {/* Exercise Type 4: Speech Practice with Strict Pronunciation Evaluation */}
         {currentExercise.type === 'speech' && (
           <div className="text-center py-4 space-y-5">
             <div className="p-6 bg-sky-50 border-2 border-sky-200 rounded-3xl">
@@ -566,38 +590,24 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
               </button>
             </div>
 
-            {/* Microphone Button with Live Waveform */}
+            {/* Microphone Button */}
             <div className="flex flex-col items-center">
               {isRecording ? (
                 <div className="flex flex-col items-center gap-3">
                   <button
-                    onClick={handleStopVoice}
+                    onClick={handleStopSpeech}
                     className="w-24 h-24 rounded-full bg-rose-500 text-white flex items-center justify-center cursor-pointer shadow-lg animate-pulse scale-110"
                     title="Toque para parar e avaliar"
                   >
                     <Square className="w-9 h-9 fill-white" />
                   </button>
-
-                  {/* Visual Soundwave Bars */}
-                  <div className="flex items-center gap-1.5 h-8">
-                    {[1, 2, 3, 4, 5, 6, 7].map((bar) => {
-                      const height = Math.max(8, Math.min(32, Math.round((liveVolume / 100) * 32 * (bar % 2 === 0 ? 1.2 : 0.8))));
-                      return (
-                        <div
-                          key={bar}
-                          className="w-1.5 bg-rose-500 rounded-full transition-all duration-75"
-                          style={{ height: `${height}px` }}
-                        />
-                      );
-                    })}
-                  </div>
-                  <span className="text-rose-600 font-black text-xs uppercase tracking-wider">
-                    Gravando sua voz... (Toque no quadrado quando terminar)
+                  <span className="text-rose-600 font-black text-xs uppercase tracking-wider animate-bounce">
+                    🎙️ Gravando... Fale agora! (Toque no quadrado para finalizar)
                   </span>
                 </div>
               ) : (
                 <button
-                  onClick={handleStartVoice}
+                  onClick={handleStartSpeech}
                   className="w-24 h-24 rounded-full btn-3d-blue flex items-center justify-center cursor-pointer shadow-lg active:scale-95 transition-all"
                   title="Toque para falar"
                 >
@@ -607,26 +617,33 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
 
               {!isRecording && (
                 <span className="text-slate-700 font-black text-sm mt-3">
-                  Toque no microfone para falar
+                  Toque no microfone e pronuncie a frase
                 </span>
               )}
 
-              {/* What was heard */}
-              {spokenTranscript && (
-                <div className="mt-3 p-3 bg-emerald-50 border border-emerald-300 rounded-2xl max-w-sm">
-                  <span className="text-[11px] font-black uppercase text-emerald-700 block mb-0.5">
-                    Ouvido pelo sistema:
+              {/* Real words being detected live */}
+              {liveSpokenText && (
+                <div className="mt-3 p-3 bg-slate-100 border border-slate-300 rounded-2xl max-w-sm">
+                  <span className="text-[11px] font-black uppercase text-slate-500 block mb-0.5">
+                    Ouvido pelo microfone:
                   </span>
                   <p className="text-base font-black text-slate-800">
-                    "{spokenTranscript}"
+                    "{liveSpokenText}"
                   </p>
                 </div>
               )}
 
-              {/* Error Message */}
-              {speechError && (
+              {/* Error or status message */}
+              {speechStatusMsg && !liveSpokenText && (
                 <div className="mt-3 p-3 bg-amber-50 border border-amber-300 rounded-2xl max-w-sm text-xs text-amber-900 font-bold text-center">
-                  {speechError}
+                  {speechStatusMsg}
+                </div>
+              )}
+
+              {/* Pronunciation Feedback message if failed */}
+              {evaluationFeedback && status === 'incorrect' && (
+                <div className="mt-3 p-3 bg-rose-50 border border-rose-300 rounded-2xl max-w-sm text-xs text-rose-900 font-bold text-center">
+                  {evaluationFeedback}
                 </div>
               )}
             </div>

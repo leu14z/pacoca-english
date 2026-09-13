@@ -1,4 +1,4 @@
-// Web Audio API Sound Synthesizer & High-Quality AI Voice Engine for Paçoca English
+// Web Audio API Sound Synthesizer & High-Fidelity Voice Engine for Paçoca English
 
 class SoundController {
   private ctx: AudioContext | null = null;
@@ -13,7 +13,6 @@ class SoundController {
     }
   }
 
-  // Duolingo-style crisp success chord (C5 -> E5 -> G5 -> C6 chime)
   playSuccess() {
     try {
       this.initCtx();
@@ -35,12 +34,9 @@ class SoundController {
         osc.start(this.ctx!.currentTime + idx * 0.08);
         osc.stop(this.ctx!.currentTime + idx * 0.08 + 0.36);
       });
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
 
-  // Friendly soft error bonk
   playError() {
     try {
       this.initCtx();
@@ -60,12 +56,9 @@ class SoundController {
 
       osc.start(this.ctx.currentTime);
       osc.stop(this.ctx.currentTime + 0.33);
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
 
-  // Gentle UI tap / word select sound
   playClick() {
     try {
       this.initCtx();
@@ -85,12 +78,9 @@ class SoundController {
 
       osc.start(this.ctx.currentTime);
       osc.stop(this.ctx.currentTime + 0.08);
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
 
-  // Triumphant Fanfare for lesson complete
   playVictory() {
     try {
       this.initCtx();
@@ -118,97 +108,152 @@ class SoundController {
         osc.start(this.ctx!.currentTime + item.t);
         osc.stop(this.ctx!.currentTime + item.t + item.d + 0.01);
       });
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
 }
 
 export const sound = new SoundController();
 
-// Preload and Cache Available Voices to avoid the empty array bug on page load
+// Voice Management & Preloading
 let cachedVoices: SpeechSynthesisVoice[] = [];
 
-const loadVoices = () => {
+const updateVoiceCache = () => {
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
     cachedVoices = window.speechSynthesis.getVoices();
   }
 };
 
 if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-  loadVoices();
-  window.speechSynthesis.onvoiceschanged = () => {
-    loadVoices();
-  };
+  updateVoiceCache();
+  window.speechSynthesis.onvoiceschanged = updateVoiceCache;
+}
+
+export type PreferredVoiceStyle = 'female-natural' | 'male-british' | 'google-natural';
+
+export function getSavedVoicePreference(): PreferredVoiceStyle {
+  if (typeof window === 'undefined') return 'female-natural';
+  return (localStorage.getItem('pacoca_voice_style') as PreferredVoiceStyle) || 'female-natural';
+}
+
+export function setSavedVoicePreference(style: PreferredVoiceStyle) {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem('pacoca_voice_style', style);
 }
 
 /**
- * Finds the highest quality Natural / Neural / AI human voice available in the browser.
- * Filters out legacy robotic voices like Microsoft David.
+ * Selects a high-quality human/natural voice.
+ * BAN the ancient Microsoft David robot voice!
  */
-export function getBestNaturalVoice(): SpeechSynthesisVoice | null {
+export function selectBestVoice(preference?: PreferredVoiceStyle): SpeechSynthesisVoice | null {
   const voices = cachedVoices.length > 0 ? cachedVoices : (typeof window !== 'undefined' && 'speechSynthesis' in window ? window.speechSynthesis.getVoices() : []);
   if (!voices || voices.length === 0) return null;
 
-  const englishVoices = voices.filter((v) => v.lang.startsWith('en'));
-  if (englishVoices.length === 0) return null;
-
-  // 1. Highest priority: Microsoft Natural / Azure Neural AI Voices (Jenny, Aria, Guy, Ryan, Sonia)
-  const naturalVoices = englishVoices.filter(
-    (v) =>
-      v.name.includes('Natural') ||
-      v.name.includes('Online (Natural)') ||
-      v.name.includes('Neural') ||
-      v.name.includes('Jenny') ||
-      v.name.includes('Aria') ||
-      v.name.includes('Guy')
+  // Filter English voices only, AND BAN DAVID!
+  const englishVoices = voices.filter(
+    (v) => v.lang.startsWith('en') && !v.name.toLowerCase().includes('david')
   );
-  if (naturalVoices.length > 0) {
-    return naturalVoices[0];
+
+  if (englishVoices.length === 0) {
+    // If only David existed, pick any english voice as absolute last resort
+    return voices.find((v) => v.lang.startsWith('en')) || null;
   }
 
-  // 2. Google High Quality US/UK English
-  const googleVoices = englishVoices.filter((v) => v.name.includes('Google') && (v.lang === 'en-US' || v.lang === 'en-GB'));
-  if (googleVoices.length > 0) {
-    return googleVoices[0];
+  const pref = preference || getSavedVoicePreference();
+
+  // Option 1: Female Natural (Microsoft Zira or Google US English Female or Jenny)
+  if (pref === 'female-natural') {
+    const femaleVoice = englishVoices.find(
+      (v) =>
+        v.name.includes('Zira') ||
+        v.name.includes('Jenny') ||
+        v.name.includes('Google US English') ||
+        v.name.includes('Samantha') ||
+        v.name.includes('Aria')
+    );
+    if (femaleVoice) return femaleVoice;
   }
 
-  // 3. Apple High Quality voices (Samantha, Daniel, Victoria, Ava)
-  const appleVoices = englishVoices.filter(
-    (v) => v.name.includes('Samantha') || v.name.includes('Daniel') || v.name.includes('Ava')
-  );
-  if (appleVoices.length > 0) {
-    return appleVoices[0];
+  // Option 2: British English (Microsoft Daniel or George)
+  if (pref === 'male-british') {
+    const britishVoice = englishVoices.find(
+      (v) =>
+        v.name.includes('Daniel') ||
+        v.name.includes('George') ||
+        v.lang === 'en-GB'
+    );
+    if (britishVoice) return britishVoice;
   }
 
-  // 4. Any en-US voice that is not the ancient 'David'
-  const nonDavid = englishVoices.filter((v) => v.lang === 'en-US' && !v.name.includes('David'));
-  if (nonDavid.length > 0) return nonDavid[0];
+  // Option 3: Google US English
+  const googleVoice = englishVoices.find((v) => v.name.includes('Google'));
+  if (googleVoice) return googleVoice;
+
+  // Option 4: Microsoft Zira (Female)
+  const zira = englishVoices.find((v) => v.name.includes('Zira'));
+  if (zira) return zira;
 
   return englishVoices[0];
 }
 
+import audioManifest from '../data/audioManifest.json';
+
+let currentAudio: HTMLAudioElement | null = null;
+
+function textToSlug(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
 /**
- * Text to Speech with Natural Human/AI Voice Engine
+ * Speaks English phrase using Studio AI Neural Voice (Microsoft Edge Neural Aria/Jenny).
+ * Falls back to browser synthesis if audio file is not available.
  */
 export function speakEnglish(text: string, slow: boolean = false) {
-  if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-    return;
+  if (typeof window === 'undefined') return;
+
+  // Stop any currently playing audio or speech
+  if (currentAudio) {
+    try {
+      currentAudio.pause();
+      currentAudio.currentTime = 0;
+    } catch {}
+    currentAudio = null;
+  }
+  if ('speechSynthesis' in window) {
+    window.speechSynthesis.cancel();
   }
 
-  window.speechSynthesis.cancel(); // Stop any pending audio
+  const cleanText = text.replace(/["'?!.,]/g, '').trim().toLowerCase();
+  const slug = textToSlug(text);
 
-  const cleanText = text.replace(/["'?!.,]/g, '').trim();
+  const manifestMap = audioManifest as Record<string, string>;
+  const audioUrl = manifestMap[cleanText] || manifestMap[slug] || `/audio/${slug}.mp3`;
 
-  const utterance = new SpeechSynthesisUtterance(cleanText);
-  utterance.lang = 'en-US';
-  utterance.rate = slow ? 0.72 : 0.96;
-  utterance.pitch = 1.0;
+  // Try playing the authentic studio AI Neural MP3 first
+  const audio = new Audio(audioUrl);
+  audio.playbackRate = slow ? 0.75 : 1.0;
+  currentAudio = audio;
 
-  const bestVoice = getBestNaturalVoice();
-  if (bestVoice) {
-    utterance.voice = bestVoice;
+  const playPromise = audio.play();
+  if (playPromise !== undefined) {
+    playPromise.catch(() => {
+      // Audio file not found or couldn't play: Fallback to high-quality browser SpeechSynthesis
+      if ('speechSynthesis' in window) {
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'en-US';
+        utterance.rate = slow ? 0.75 : 0.95;
+        utterance.pitch = 1.05;
+
+        const chosenVoice = selectBestVoice();
+        if (chosenVoice) {
+          utterance.voice = chosenVoice;
+        }
+        window.speechSynthesis.speak(utterance);
+      }
+    });
   }
-
-  window.speechSynthesis.speak(utterance);
 }
+
