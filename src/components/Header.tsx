@@ -25,40 +25,51 @@ export const Header: React.FC = () => {
 
   return (
     <>
-      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b-2 border-slate-200 px-4 py-2.5 sm:py-3 transition-all">
-        <div className="max-w-5xl mx-auto flex items-center justify-between gap-2">
-          {/* Language Flag & Current User Tag */}
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 rounded-xl border-2 border-slate-200">
-              <span className="text-xl">🇺🇸</span>
-              <span className="font-extrabold text-xs uppercase tracking-wider text-slate-700 hidden sm:inline">
-                Inglês
-              </span>
+      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b-2 border-slate-200 px-4 py-2.5 transition-all">
+        <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
+          {/* Course Badge with Crisp SVG Flag (Duolingo Style - No broken Windows emoji) */}
+          <div
+            className="flex items-center gap-2.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200/80 rounded-2xl border-2 border-slate-200/90 transition-colors cursor-pointer select-none"
+            title="Curso de Inglês"
+          >
+            {/* High-res SVG American Flag */}
+            <div className="w-6 h-4 rounded-xs overflow-hidden shadow-2xs flex-shrink-0 border border-slate-300">
+              <svg viewBox="0 0 60 40" className="w-full h-full object-cover">
+                <rect width="60" height="40" fill="#b22234" />
+                <path d="M0,6.15h60 M0,12.3h60 M0,18.45h60 M0,24.6h60 M0,30.75h60 M0,36.9h60" stroke="#fff" strokeWidth="3.08" />
+                <rect width="25" height="21.5" fill="#3c3b6e" />
+                {/* 5 clean stars */}
+                <g fill="#fff">
+                  <circle cx="5" cy="4" r="1.3" />
+                  <circle cx="12" cy="4" r="1.3" />
+                  <circle cx="19" cy="4" r="1.3" />
+                  <circle cx="8.5" cy="10" r="1.3" />
+                  <circle cx="15.5" cy="10" r="1.3" />
+                  <circle cx="5" cy="16" r="1.3" />
+                  <circle cx="12" cy="16" r="1.3" />
+                  <circle cx="19" cy="16" r="1.3" />
+                </g>
+              </svg>
             </div>
-
-            {/* Current Logged In User Pill */}
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border-2 border-amber-200 rounded-xl text-amber-900 shadow-2xs">
-              <img
-                src={currentUser.avatar}
-                alt={currentUser.name}
-                className="w-6 h-6 rounded-full object-cover border border-amber-300"
-              />
-              <span className="font-black text-xs sm:text-sm max-w-[120px] truncate">
-                {currentUser.name}
-              </span>
-            </div>
+            <span className="font-fredoka text-xs font-bold uppercase tracking-wider text-slate-700">
+              Inglês
+            </span>
           </div>
 
-          {/* Gamification Counters: Streak, Gems, Hearts */}
+          {/* Right Gamification Stats: Streak, Gems, Hearts & Profile Avatar */}
           <div className="flex items-center gap-2 sm:gap-4">
             {/* Streak Flame */}
             <div
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl font-black text-sm transition-all ${
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-2xl font-black text-sm transition-all select-none ${
                 currentUser.completedToday
                   ? 'text-amber-500 hover:bg-amber-50'
                   : 'text-slate-400 hover:bg-slate-100'
               }`}
-              title={currentUser.completedToday ? 'Ofensiva ativa hoje!' : 'Complete uma lição hoje para manter a ofensiva!'}
+              title={
+                currentUser.completedToday
+                  ? 'Ofensiva ativa hoje! Parabéns!'
+                  : 'Complete uma lição hoje para acender a chama da ofensiva!'
+              }
             >
               <Flame
                 className={`w-5 h-5 ${
@@ -72,7 +83,7 @@ export const Header: React.FC = () => {
 
             {/* Gems / Diamonds */}
             <div
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl font-black text-sm text-sky-500 hover:bg-sky-50 transition-colors"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-2xl font-black text-sm text-sky-500 hover:bg-sky-50 transition-colors select-none"
               title="Gemas do Paçoca"
             >
               <Gem className="w-5 h-5 fill-sky-500 text-sky-500" />
@@ -82,12 +93,24 @@ export const Header: React.FC = () => {
             {/* Hearts */}
             <button
               onClick={() => setShowHeartModal(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl font-black text-sm text-rose-500 hover:bg-rose-50 transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-2xl font-black text-sm text-rose-500 hover:bg-rose-50 transition-colors cursor-pointer select-none"
               title="Vidas restantes. Clique para recarregar!"
             >
               <Heart className="w-5 h-5 fill-rose-500 text-rose-500" />
               <span>{currentUser.hearts}</span>
             </button>
+
+            {/* User Profile Avatar (Sleek circular badge on far right) */}
+            <div
+              className="w-9 h-9 rounded-full border-2 border-slate-300 hover:border-amber-400 overflow-hidden shadow-2xs transition-all cursor-pointer select-none flex-shrink-0"
+              title={`Conectado como ${currentUser.name}`}
+            >
+              <img
+                src={currentUser.avatar || './mascot/mascoteoficial.png'}
+                alt={currentUser.name}
+                className="w-full h-full object-cover"
+              />
+            </div>
           </div>
         </div>
       </header>
