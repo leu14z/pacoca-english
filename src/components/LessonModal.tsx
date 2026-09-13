@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Volume2, Snail, Mic, CheckCircle2, XCircle, Heart, RefreshCw, RotateCcw } from 'lucide-react';
+import { X, Volume2, Snail, Mic, CheckCircle2, XCircle, Heart, RotateCcw, Square } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { motion } from 'framer-motion';
 import type { Lesson, Exercise } from '../data/courses';
@@ -7,7 +7,8 @@ import { useUser } from '../context/UserContext';
 import { Mascot } from './Mascot';
 import { sound, speakEnglish } from '../utils/audio';
 import type { MascotMood } from '../utils/mascot';
-import { listenForPhrase, isSpeechSupported } from '../utils/speech';
+import { startRobustVoiceSession } from '../utils/speech';
+import type { VoiceRecordingSession } from '../utils/speech';
 
 interface LessonModalProps {
   lesson: Lesson;
@@ -35,11 +36,12 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
   const [mascotMood, setMascotMood] = useState<MascotMood>('official');
   const [mascotSpeech, setMascotSpeech] = useState<string | undefined>(undefined);
 
-  // Speech Recognition States
-  const [speechState, setSpeechState] = useState<'idle' | 'listening' | 'processing' | 'error' | 'done'>('idle');
-  const [speechMessage, setSpeechMessage] = useState<string>('');
-  const [spokenTranscript, setSpokenTranscript] = useState<string>('');
-  const abortSpeechRef = useRef<(() => void) | null>(null);
+  // Robust Voice Session States
+  const [isRecording, setIsRecording] = useState(false);
+  const [liveVolume, setLiveVolume] = useState(0);
+  const [speechError, setSpeechError] = useState('');
+  const [spokenTranscript, setSpokenTranscript] = useState('');
+  const voiceSessionRef = useRef<VoiceRecordingSession | null>(null);
 
   const currentExercise: Exercise = exerciseList[currentIndex];
   const progressPercent = ((currentIndex) / exerciseList.length) * 100;
@@ -50,13 +52,14 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
     setStatus('answering');
     setSelectedAnswer(null);
     setSelectedPair(null);
-    setSpeechState('idle');
-    setSpeechMessage('');
+    setIsRecording(false);
+    setLiveVolume(0);
+    setSpeechError('');
     setSpokenTranscript('');
 
-    if (abortSpeechRef.current) {
-      abortSpeechRef.current();
-      abortSpeechRef.current = null;
+    if (voiceSessionRef.current) {
+      voiceSessionRef.current.stop();
+      voiceSessionRef.current = null;
     }
 
     if (currentExercise.type === 'word-bank' || currentExercise.type === 'listen-bank') {
@@ -92,11 +95,11 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
     }
   }, [currentIndex, isReviewMode]);
 
-  // Clean up speech on unmount
+  // Clean up recording on unmount
   useEffect(() => {
     return () => {
-      if (abortSpeechRef.current) {
-        abortSpeechRef.current();
+      if (voiceSessionRef.current) {
+        voiceSessionRef.current.stop();
       }
     };
   }, []);
@@ -157,50 +160,66 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
     }
   };
 
-  // Handle Speech Recognition with continuous live capture
-  const handleSpeechRecord = () => {
+  // Start robust voice recording
+  const handleStartVoice = async () => {
     sound.playClick();
+    setIsRecording(true);
+    setSpeechError('');
+    setSpokenTranscript('');
 
-    if (!isSpeechSupported()) {
-      setSpeechState('error');
-      setSpeechMessage('Seu navegador não tem suporte a microfone direto. Toque em "Ouvir pronúncia nativa" e repita em voz alta!');
-      return;
-    }
+    const target = currentExercise.englishPhrase || (currentExercise.correctAnswer as string);
 
-    if (abortSpeechRef.current) {
-      abortSpeechRef.current();
-    }
-
-    const targetPhrase = currentExercise.englishPhrase || (currentExercise.correctAnswer as string);
-
-    abortSpeechRef.current = listenForPhrase(
-      targetPhrase,
-      (interim) => {
-        setSpokenTranscript(interim);
-      },
-      (newStatus, msg) => {
-        setSpeechState(newStatus);
-        if (msg) setSpeechMessage(msg);
-      },
-      (result) => {
-        setSpokenTranscript(result.transcript);
-        if (result.isMatch) {
+    const session = await startRobustVoiceSession(
+      target,
+      (vol) => setLiveVolume(vol),
+      (liveText) => setSpokenTranscript(liveText),
+      (isMatch, finalSpoken) => {
+        setIsRecording(false);
+        setSpokenTranscript(finalSpoken);
+        if (isMatch) {
           handleSuccess();
         } else {
           sound.playError();
           setMascotMood('wrong');
-          setMascotSpeech('Quase lá! Tente pronunciar novamente mais perto do microfone.');
+          setMascotSpeech('Pronúncia detectada! Vamos tentar mais uma vez para ficar perfeito!');
         }
+      },
+      (errMsg) => {
+        setIsRecording(false);
+        setSpeechError(errMsg);
       }
     );
+
+    voiceSessionRef.current = session;
   };
 
-  const handleStopSpeech = () => {
-    if (abortSpeechRef.current) {
-      abortSpeechRef.current();
-      abortSpeechRef.current = null;
+  const handleStopVoice = () => {
+    if (voiceSessionRef.current) {
+      voiceSessionRef.current.stop();
+      voiceSessionRef.current = null;
     }
-    setSpeechState('done');
+    setIsRecording(false);
+  };
+
+  // Immediate retry on mistake
+  const handleRetryNow = () => {
+    sound.playClick();
+    setStatus('answering');
+    setSelectedAnswer(null);
+
+    if (currentExercise.type === 'word-bank' || currentExercise.type === 'listen-bank') {
+      const words = [...(currentExercise.options || [])].sort(() => Math.random() - 0.5);
+      setAvailableWords(words);
+      setSelectedWords([]);
+    }
+
+    if (currentExercise.type === 'match-pairs') {
+      setMatchedPairs([]);
+      setSelectedPair(null);
+    }
+
+    setMascotMood('official');
+    setMascotSpeech('Bora lá! Agora vai dar certo!');
   };
 
   // Validate current answer
@@ -246,9 +265,9 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
     setStatus('incorrect');
     setCombo(0);
     setMascotMood('wrong');
-    setMascotSpeech('Opa! Não se preocupe: você terá a chance de refazer esta questão no final da lição!');
+    setMascotSpeech('Opa! Você pode tentar novamente agora mesmo ou continuar!');
 
-    // Add to review queue so user gets to redo it!
+    // Add to review queue as well
     if (!reviewQueue.some((q) => q.id === currentExercise.id)) {
       setReviewQueue((prev) => [...prev, currentExercise]);
     }
@@ -258,16 +277,16 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
     if (currentIndex + 1 < exerciseList.length) {
       setCurrentIndex((prev) => prev + 1);
     } else if (reviewQueue.length > 0) {
-      // START REVIEW ROUND FOR MISSED EXERCISES!
+      // START REVIEW ROUND
       sound.playClick();
       setExerciseList([...reviewQueue]);
       setReviewQueue([]);
       setCurrentIndex(0);
       setIsReviewMode(true);
       setMascotMood('tip');
-      setMascotSpeech('Hora de revisar! Vamos refazer as questões que você errou para fixar de vez!');
+      setMascotSpeech('Hora da revisão! Vamos refazer as questões que ficaram pendentes!');
     } else {
-      // COMPLETED EVERYTHING SUCCESSFULLY!
+      // COMPLETED LESSON!
       setStatus('completed');
       sound.playVictory();
       setMascotMood('proud');
@@ -312,14 +331,14 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
             animate={{ scale: 1, opacity: 1 }}
             transition={{ type: 'spring', stiffness: 300, damping: 20 }}
           >
-            <Mascot mood="proud" size="xl" speech="Parabéns! Você concluiu tudo com sucesso!" className="mb-4" />
+            <Mascot mood="proud" size="xl" speech="Parabéns! Você concluiu tudo com maestria!" className="mb-4" />
           </motion.div>
 
           <h2 className="font-fredoka text-4xl text-amber-500 font-black mb-2">
             Lição Concluída!
           </h2>
           <p className="text-slate-600 font-bold text-base mb-8">
-            Você aprendeu todas as frases e acertou a revisão com louvor!
+            Você praticou e dominou todas as expressões desta lição!
           </p>
 
           {/* Reward cards */}
@@ -528,7 +547,7 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
           </div>
         )}
 
-        {/* Exercise Type 4: Speech Practice with Live Continuous Capture */}
+        {/* Exercise Type 4: Speech Practice with Live Audio Meter */}
         {currentExercise.type === 'speech' && (
           <div className="text-center py-4 space-y-5">
             <div className="p-6 bg-sky-50 border-2 border-sky-200 rounded-3xl">
@@ -547,39 +566,52 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
               </button>
             </div>
 
-            {/* Microphone Button with Dynamic Continuous States */}
+            {/* Microphone Button with Live Waveform */}
             <div className="flex flex-col items-center">
-              {speechState === 'listening' ? (
-                <button
-                  onClick={handleStopSpeech}
-                  className="w-24 h-24 rounded-full bg-rose-500 text-white flex items-center justify-center cursor-pointer shadow-lg animate-pulse scale-110"
-                  title="Clique para parar de gravar"
-                >
-                  <div className="w-8 h-8 bg-white rounded-lg" />
-                </button>
+              {isRecording ? (
+                <div className="flex flex-col items-center gap-3">
+                  <button
+                    onClick={handleStopVoice}
+                    className="w-24 h-24 rounded-full bg-rose-500 text-white flex items-center justify-center cursor-pointer shadow-lg animate-pulse scale-110"
+                    title="Toque para parar e avaliar"
+                  >
+                    <Square className="w-9 h-9 fill-white" />
+                  </button>
+
+                  {/* Visual Soundwave Bars */}
+                  <div className="flex items-center gap-1.5 h-8">
+                    {[1, 2, 3, 4, 5, 6, 7].map((bar) => {
+                      const height = Math.max(8, Math.min(32, Math.round((liveVolume / 100) * 32 * (bar % 2 === 0 ? 1.2 : 0.8))));
+                      return (
+                        <div
+                          key={bar}
+                          className="w-1.5 bg-rose-500 rounded-full transition-all duration-75"
+                          style={{ height: `${height}px` }}
+                        />
+                      );
+                    })}
+                  </div>
+                  <span className="text-rose-600 font-black text-xs uppercase tracking-wider">
+                    Gravando sua voz... (Toque no quadrado quando terminar)
+                  </span>
+                </div>
               ) : (
                 <button
-                  onClick={handleSpeechRecord}
-                  className="w-24 h-24 rounded-full btn-3d-blue flex items-center justify-center cursor-pointer shadow-lg"
-                  title="Toque no microfone e fale"
+                  onClick={handleStartVoice}
+                  className="w-24 h-24 rounded-full btn-3d-blue flex items-center justify-center cursor-pointer shadow-lg active:scale-95 transition-all"
+                  title="Toque para falar"
                 >
-                  {speechState === 'processing' ? (
-                    <RefreshCw className="w-10 h-10 animate-spin text-white" />
-                  ) : (
-                    <Mic className="w-10 h-10 text-white" />
-                  )}
+                  <Mic className="w-10 h-10 text-white" />
                 </button>
               )}
 
-              <span className="text-slate-700 font-black text-sm mt-3">
-                {speechState === 'listening'
-                  ? '🎙️ Microfone ouvindo... Fale agora! (Toque no botão vermelho quando terminar)'
-                  : speechState === 'processing'
-                  ? 'Avaliando o que você disse...'
-                  : 'Toque no microfone para falar'}
-              </span>
+              {!isRecording && (
+                <span className="text-slate-700 font-black text-sm mt-3">
+                  Toque no microfone para falar
+                </span>
+              )}
 
-              {/* Live words being spoken */}
+              {/* What was heard */}
               {spokenTranscript && (
                 <div className="mt-3 p-3 bg-emerald-50 border border-emerald-300 rounded-2xl max-w-sm">
                   <span className="text-[11px] font-black uppercase text-emerald-700 block mb-0.5">
@@ -591,10 +623,10 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
                 </div>
               )}
 
-              {/* Error Message with Help */}
-              {speechMessage && speechState === 'error' && (
+              {/* Error Message */}
+              {speechError && (
                 <div className="mt-3 p-3 bg-amber-50 border border-amber-300 rounded-2xl max-w-sm text-xs text-amber-900 font-bold text-center">
-                  {speechMessage}
+                  {speechError}
                 </div>
               )}
             </div>
@@ -607,7 +639,7 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
                 }}
                 className="text-xs text-slate-400 hover:text-slate-600 underline font-bold cursor-pointer"
               >
-                Não posso falar agora / Continuar
+                Não posso falar agora / Pular exercício
               </button>
             </div>
           </div>
@@ -663,7 +695,7 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
         </div>
       </div>
 
-      {/* Bottom Action Footer Sheet */}
+      {/* Bottom Action Footer Sheet with Immediate Retry Option */}
       <div
         className={`w-full border-t-2 p-4 sm:p-6 transition-all ${
           status === 'correct'
@@ -705,25 +737,41 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
                     </span>
                   </p>
                   <p className="text-[11px] font-bold text-rose-600 mt-0.5">
-                    Você terá a chance de refazer esta questão no final da lição!
+                    Você pode refazer agora ou continuar!
                   </p>
                 </div>
               </div>
             )}
           </div>
 
-          <button
-            onClick={handleVerify}
-            className={`py-3.5 px-8 rounded-2xl font-black text-base uppercase tracking-wider cursor-pointer transition-all ${
-              status === 'correct'
-                ? 'btn-3d-green'
-                : status === 'incorrect'
-                ? 'btn-3d-red'
-                : 'btn-3d-green'
-            }`}
-          >
-            {status === 'answering' ? 'Verificar' : 'Continuar'}
-          </button>
+          {/* Action Buttons: If incorrect, offers "Tentar Novamente" AND "Continuar" */}
+          {status === 'incorrect' ? (
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleRetryNow}
+                className="py-3 px-5 bg-white hover:bg-slate-50 border-2 border-slate-300 border-b-4 border-b-slate-400 rounded-2xl font-black text-slate-800 text-xs sm:text-sm flex items-center gap-2 cursor-pointer shadow-xs active:border-b-2 active:translate-y-0.5 transition-all"
+              >
+                <RotateCcw className="w-4 h-4 text-amber-600" />
+                <span>Tentar Novamente</span>
+              </button>
+
+              <button
+                onClick={handleNext}
+                className="py-3 px-6 btn-3d-red rounded-2xl font-black text-xs sm:text-sm uppercase tracking-wider cursor-pointer transition-all"
+              >
+                Continuar
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={handleVerify}
+              className={`py-3.5 px-8 rounded-2xl font-black text-base uppercase tracking-wider cursor-pointer transition-all ${
+                status === 'correct' ? 'btn-3d-green' : 'btn-3d-green'
+              }`}
+            >
+              {status === 'answering' ? 'Verificar' : 'Continuar'}
+            </button>
+          )}
         </div>
       </div>
     </div>
