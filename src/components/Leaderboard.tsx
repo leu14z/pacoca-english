@@ -1,45 +1,14 @@
 import React from 'react';
-import { Trophy, Sparkles } from 'lucide-react';
+import { Trophy, Sparkles, UserPlus } from 'lucide-react';
 import { useUser } from '../context/UserContext';
 
 export const Leaderboard: React.FC = () => {
-  const { currentUser, partner } = useUser();
+  const { currentUser, allLearners } = useUser();
 
   if (!currentUser) return null;
 
-  // Authentic community learners with realistic names and real-time XP
-  const studyGroup = [
-    { id: 'u1', name: 'Lucas Silva', xp: 195, avatar: './mascot/mascoteoficial.png' },
-    { id: 'u2', name: 'Camila Rocha', xp: 165, avatar: './mascot/certinho.png' },
-    { id: 'u3', name: 'Gabriel Santos', xp: 125, avatar: './mascot/orgulhoso.png' },
-    { id: 'u4', name: 'Mariana Lima', xp: 90, avatar: './mascot/atencao.png' },
-    { id: 'u5', name: 'Felipe Ramos', xp: 70, avatar: './mascot/doido.png' },
-  ];
-
-  // Combine currentUser, partner, and study group
-  const allLearners = [
-    {
-      id: currentUser.id,
-      name: `${currentUser.name} (Você)`,
-      xp: currentUser.xp,
-      avatar: currentUser.avatar,
-      isCurrent: true,
-      streak: currentUser.streak,
-    },
-    ...(partner
-      ? [
-          {
-            id: 'partner_id',
-            name: `${partner.name}`,
-            xp: partner.xp,
-            avatar: partner.avatar,
-            isPartner: true,
-            streak: partner.streak,
-          },
-        ]
-      : []),
-    ...studyGroup,
-  ].sort((a, b) => b.xp - a.xp);
+  // STRICTLY REAL REGISTERED USERS ONLY - NO FAKE / MOCK PEOPLE
+  const sortedLearners = [...allLearners].sort((a, b) => b.xp - a.xp);
 
   return (
     <div className="max-w-2xl mx-auto space-y-6 pb-24">
@@ -47,13 +16,13 @@ export const Leaderboard: React.FC = () => {
       <div className="bg-linear-to-r from-amber-400 to-amber-600 rounded-3xl p-6 text-white shadow-lg flex items-center justify-between gap-4">
         <div>
           <span className="text-xs font-black uppercase tracking-wider text-amber-100 flex items-center gap-1 mb-1">
-            <Sparkles className="w-4 h-4" /> Liga de Prática Semanal
+            <Sparkles className="w-4 h-4" /> Placar em Tempo Real
           </span>
           <h2 className="font-fredoka text-2xl sm:text-3xl font-black">
-            Classificação em Tempo Real
+            Ranking da Plataforma
           </h2>
           <p className="text-amber-100 text-xs sm:text-sm font-bold mt-1">
-            Os 3 primeiros sobem de nível na liga todo domingo!
+            Exibindo apenas os estudantes reais cadastrados.
           </p>
         </div>
         <Trophy className="w-16 h-16 text-amber-200 shrink-0" />
@@ -61,18 +30,15 @@ export const Leaderboard: React.FC = () => {
 
       {/* Leaderboard List */}
       <div className="bg-white border-2 border-slate-200 rounded-3xl overflow-hidden shadow-xs">
-        {allLearners.map((learner, idx) => {
+        {sortedLearners.map((learner, idx) => {
           const rank = idx + 1;
+          const isCurrent = learner.id === currentUser.id;
 
           return (
             <div
               key={learner.id}
               className={`flex items-center justify-between p-4 border-b border-slate-100 last:border-b-0 transition-colors ${
-                (learner as any).isCurrent
-                  ? 'bg-sky-50 font-bold'
-                  : (learner as any).isPartner
-                  ? 'bg-rose-50/50'
-                  : 'hover:bg-slate-50'
+                isCurrent ? 'bg-sky-50 font-bold' : 'hover:bg-slate-50'
               }`}
             >
               <div className="flex items-center gap-3 sm:gap-4">
@@ -91,7 +57,7 @@ export const Leaderboard: React.FC = () => {
 
                 {/* Avatar */}
                 <img
-                  src={learner.avatar}
+                  src={learner.avatar || './mascot/mascoteoficial.png'}
                   alt={learner.name}
                   className="w-11 h-11 rounded-full object-cover border-2 border-slate-200"
                 />
@@ -102,14 +68,14 @@ export const Leaderboard: React.FC = () => {
                     <span className="font-black text-slate-800 text-sm sm:text-base">
                       {learner.name}
                     </span>
-                    {(learner as any).isPartner && (
-                      <span className="text-[10px] bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full font-black">
-                        Seu Par ❤️
+                    {isCurrent && (
+                      <span className="text-[10px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full font-black">
+                        Você
                       </span>
                     )}
                   </div>
                   <span className="text-xs text-slate-400 font-bold">
-                    {rank <= 3 ? 'Zona de Promoção' : 'Permanece na Liga'}
+                    {learner.streak} {learner.streak === 1 ? 'dia' : 'dias'} de ofensiva
                   </span>
                 </div>
               </div>
@@ -121,6 +87,17 @@ export const Leaderboard: React.FC = () => {
             </div>
           );
         })}
+
+        {/* If only 1 user registered */}
+        {sortedLearners.length <= 1 && (
+          <div className="p-6 text-center text-slate-500 font-bold text-sm bg-slate-50">
+            <UserPlus className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+            <p>Apenas você está cadastrado neste momento.</p>
+            <p className="text-xs text-slate-400 mt-1">
+              Conforme sua namorada ou seus pais criarem a conta deles, eles aparecerão aqui no ranking em tempo real!
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -29,7 +29,7 @@ export const CoupleDashboard: React.FC = () => {
 
   const handleCopyCode = () => {
     sound.playClick();
-    navigator.clipboard.writeText(currentUser.coupleCode);
+    navigator.clipboard.writeText(currentUser.coupleCode || '');
     setCodeCopied(true);
     setTimeout(() => setCodeCopied(false), 2500);
   };
@@ -145,7 +145,7 @@ export const CoupleDashboard: React.FC = () => {
           <div className="w-full bg-slate-200 h-3 rounded-full overflow-hidden">
             <div
               className="bg-emerald-500 h-full rounded-full transition-all"
-              style={{ width: currentUser.completedToday ? '100%' : '40%' }}
+              style={{ width: currentUser.completedToday ? '100%' : '0%' }}
             />
           </div>
         </div>
@@ -186,7 +186,7 @@ export const CoupleDashboard: React.FC = () => {
           <div className="w-full bg-slate-200 h-3 rounded-full overflow-hidden">
             <div
               className="bg-emerald-500 h-full rounded-full transition-all"
-              style={{ width: partner?.completedToday ? '100%' : '30%' }}
+              style={{ width: partner?.completedToday ? '100%' : '0%' }}
             />
           </div>
         </div>
@@ -215,7 +215,7 @@ export const CoupleDashboard: React.FC = () => {
               Seu Código de Casal para enviar a ela:
             </span>
             <div className="font-mono text-xl font-black text-slate-800 tracking-wider">
-              {currentUser.coupleCode}
+              {currentUser.coupleCode || 'GERANDO...'}
             </div>
           </div>
           <button

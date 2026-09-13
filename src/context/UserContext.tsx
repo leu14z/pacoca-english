@@ -1,32 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { loginWithGooglePopup, logoutFirebase, isFirebaseConfigured } from '../services/firebase';
-
-export interface UserProfile {
-  id: string;
-  name: string;
-  email: string;
-  avatar: string;
-  xp: number;
-  hearts: number;
-  maxHearts: number;
-  diamonds: number;
-  streak: number;
-  lastActiveDate: string; // YYYY-MM-DD
-  completedLessons: string[];
-  completedToday: boolean;
-  coupleCode: string;
-  partnerCode?: string;
-}
-
-export interface PartnerData {
-  name: string;
-  email?: string;
-  avatar: string;
-  xp: number;
-  streak: number;
-  completedToday: boolean;
-  coupleCode: string;
-}
+import type { AuthUserProfile } from '../services/auth';
+import { getRegisteredUsers, saveRegisteredUser } from '../services/auth';
 
 export interface CoupleStats {
   sharedStreak: number;
@@ -38,12 +12,12 @@ export interface CoupleStats {
 }
 
 interface UserContextType {
-  currentUser: UserProfile | null;
-  partner: PartnerData | null;
+  currentUser: AuthUserProfile | null;
+  allLearners: AuthUserProfile[];
+  partner: AuthUserProfile | null;
   isAuthenticated: boolean;
   coupleStats: CoupleStats;
-  loginAsUser: (preset: 'leo' | 'partner') => void;
-  loginWithGoogle: () => Promise<boolean>;
+  loginUser: (email: string, name: string, avatar?: string) => void;
   logout: () => void;
   linkPartnerCode: (code: string) => boolean;
   completeLesson: (lessonId: string, xpGained: number) => void;
@@ -57,46 +31,12 @@ interface UserContextType {
 
 const getTodayString = () => new Date().toISOString().split('T')[0];
 
-const INITIAL_LEO: UserProfile = {
-  id: 'user_leo',
-  name: 'Leo',
-  email: 'leo@exemplo.com',
-  avatar: './mascot/mascoteoficial.png',
-  xp: 140,
-  hearts: 5,
-  maxHearts: 5,
-  diamonds: 320,
-  streak: 5,
-  lastActiveDate: getTodayString(),
-  completedLessons: ['lesson-1-1'],
-  completedToday: true,
-  coupleCode: 'LEO-2026',
-  partnerCode: 'AMOR-2026',
-};
-
-const INITIAL_PARTNER_PROFILE: UserProfile = {
-  id: 'user_partner',
-  name: 'Amor ❤️',
-  email: 'amor@exemplo.com',
-  avatar: './mascot/certinho.png',
-  xp: 110,
-  hearts: 5,
-  maxHearts: 5,
-  diamonds: 280,
-  streak: 4,
-  lastActiveDate: getTodayString(),
-  completedLessons: ['lesson-1-1'],
-  completedToday: false,
-  coupleCode: 'AMOR-2026',
-  partnerCode: 'LEO-2026',
-};
-
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Current logged-in user in this specific browser/phone
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
-    const saved = localStorage.getItem('pacoca_current_user');
+  // Current logged in user (null by default on fresh visit)
+  const [currentUser, setCurrentUser] = useState<AuthUserProfile | null>(() => {
+    const saved = localStorage.getItem('pacoca_current_user_v3');
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -104,32 +44,16 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // fallback
       }
     }
-    // Default to Leo on first launch
-    return INITIAL_LEO;
+    return null;
   });
 
-  // Partner data (synced or linked)
-  const [partner, setPartner] = useState<PartnerData | null>(() => {
-    const saved = localStorage.getItem('pacoca_partner_data');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        // fallback
-      }
-    }
-    return {
-      name: 'Amor ❤️',
-      avatar: './mascot/certinho.png',
-      xp: 110,
-      streak: 4,
-      completedToday: false,
-      coupleCode: 'AMOR-2026',
-    };
+  // Global list of real registered users (starts empty, only real users added)
+  const [allLearners, setAllLearners] = useState<AuthUserProfile[]>(() => {
+    return getRegisteredUsers();
   });
 
   const [coupleStats, setCoupleStats] = useState<CoupleStats>(() => {
-    const saved = localStorage.getItem('pacoca_couple_stats_v2');
+    const saved = localStorage.getItem('pacoca_couple_stats_v3');
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -137,118 +61,86 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // fallback
       }
     }
-    return { sharedStreak: 4 };
+    return { sharedStreak: 0 };
   });
 
-  // Save current user to localStorage
+  // Sync currentUser to localStorage and to global registry
   useEffect(() => {
     if (currentUser) {
-      localStorage.setItem('pacoca_current_user', JSON.stringify(currentUser));
+      localStorage.setItem('pacoca_current_user_v3', JSON.stringify(currentUser));
+      saveRegisteredUser(currentUser);
+      setAllLearners(getRegisteredUsers());
     } else {
-      localStorage.removeItem('pacoca_current_user');
+      localStorage.removeItem('pacoca_current_user_v3');
     }
   }, [currentUser]);
 
-  // Save partner data to localStorage
+  // Sync couple stats to localStorage
   useEffect(() => {
-    if (partner) {
-      localStorage.setItem('pacoca_partner_data', JSON.stringify(partner));
-    }
-  }, [partner]);
-
-  // Save couple stats to localStorage
-  useEffect(() => {
-    localStorage.setItem('pacoca_couple_stats_v2', JSON.stringify(coupleStats));
+    localStorage.setItem('pacoca_couple_stats_v3', JSON.stringify(coupleStats));
   }, [coupleStats]);
 
-  const loginAsUser = (preset: 'leo' | 'partner') => {
-    if (preset === 'leo') {
-      setCurrentUser(INITIAL_LEO);
-      setPartner({
-        name: 'Amor ❤️',
-        avatar: './mascot/certinho.png',
-        xp: 110,
-        streak: 4,
-        completedToday: false,
-        coupleCode: 'AMOR-2026',
-      });
-    } else {
-      setCurrentUser(INITIAL_PARTNER_PROFILE);
-      setPartner({
-        name: 'Leo',
-        avatar: './mascot/mascoteoficial.png',
-        xp: 140,
-        streak: 5,
-        completedToday: true,
-        coupleCode: 'LEO-2026',
-      });
-    }
-  };
+  // Find linked partner from real registered users
+  const partner = React.useMemo(() => {
+    if (!currentUser?.partnerCode) return null;
+    return (
+      allLearners.find(
+        (u) =>
+          u.id !== currentUser.id &&
+          u.coupleCode?.toUpperCase() === currentUser.partnerCode?.toUpperCase()
+      ) || null
+    );
+  }, [currentUser, allLearners]);
 
-  const loginWithGoogle = async (): Promise<boolean> => {
-    try {
-      if (isFirebaseConfigured()) {
-        const user = await loginWithGooglePopup();
-        if (user) {
-          const newUser: UserProfile = {
-            id: user.uid,
-            name: user.name,
-            email: user.email,
-            avatar: user.photoURL,
-            xp: 0,
-            hearts: 5,
-            maxHearts: 5,
-            diamonds: 100,
-            streak: 1,
-            lastActiveDate: getTodayString(),
-            completedLessons: [],
-            completedToday: false,
-            coupleCode: `PAIR-${user.uid.slice(0, 4).toUpperCase()}`,
-          };
-          setCurrentUser(newUser);
-          return true;
-        }
-      } else {
-        // Simulated Google Login for Leo or Partner when Firebase isn't configured with keys yet
-        setCurrentUser(INITIAL_LEO);
-        return true;
-      }
-      return false;
-    } catch (err) {
-      console.warn('Google login failed, falling back to local Leo account:', err);
-      setCurrentUser(INITIAL_LEO);
-      return true;
+  // Login or Register a user with complete fresh zero stats
+  const loginUser = (email: string, name: string, avatar?: string) => {
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanName = name.trim() || cleanEmail.split('@')[0];
+    const registered = getRegisteredUsers();
+    const existing = registered.find((u) => u.email.toLowerCase() === cleanEmail);
+
+    if (existing) {
+      // Existing user: preserve their real progress
+      setCurrentUser(existing);
+    } else {
+      // New user: START COMPLETELY ZEROED!
+      const randomCode = `PACOCA-${Math.floor(1000 + Math.random() * 9000)}`;
+      const newUser: AuthUserProfile = {
+        id: `user_${Date.now()}`,
+        name: cleanName,
+        email: cleanEmail,
+        avatar: avatar || './mascot/mascoteoficial.png',
+        xp: 0,                   // ZERO XP
+        hearts: 5,               // 5 Hearts
+        maxHearts: 5,
+        diamonds: 0,             // ZERO Gems
+        streak: 0,               // ZERO Streak
+        lastActiveDate: getTodayString(),
+        completedLessons: [],    // ZERO completed lessons
+        completedToday: false,   // ZERO daily progress
+        coupleCode: randomCode,
+      };
+      saveRegisteredUser(newUser);
+      setCurrentUser(newUser);
+      setAllLearners(getRegisteredUsers());
     }
   };
 
   const logout = () => {
-    logoutFirebase();
     setCurrentUser(null);
   };
 
   const linkPartnerCode = (code: string): boolean => {
     const cleanCode = code.trim().toUpperCase();
-    if (!cleanCode) return false;
+    if (!cleanCode || !currentUser) return false;
 
-    if (currentUser) {
-      setCurrentUser({
-        ...currentUser,
-        partnerCode: cleanCode,
-      });
-
-      // Update partner display name
-      const isPartnerAmor = cleanCode.includes('AMOR');
-      setPartner({
-        name: isPartnerAmor ? 'Amor ❤️' : `Par (${cleanCode})`,
-        avatar: isPartnerAmor ? './mascot/certinho.png' : './mascot/orgulhoso.png',
-        xp: 110,
-        streak: 4,
-        completedToday: true,
-        coupleCode: cleanCode,
-      });
-      return true;
-    }
-    return false;
+    const updatedUser = {
+      ...currentUser,
+      partnerCode: cleanCode,
+    };
+    setCurrentUser(updatedUser);
+    saveRegisteredUser(updatedUser);
+    return true;
   };
 
   const completeLesson = (lessonId: string, xpGained: number) => {
@@ -259,9 +151,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const updatedXp = currentUser.xp + xpGained;
     const updatedGems = currentUser.diamonds + 15;
     const wasCompletedToday = currentUser.completedToday;
-    const newStreak = wasCompletedToday ? currentUser.streak : currentUser.streak + 1;
+    const newStreak = wasCompletedToday ? currentUser.streak : (currentUser.streak === 0 ? 1 : currentUser.streak + 1);
 
-    setCurrentUser({
+    const updated: AuthUserProfile = {
       ...currentUser,
       xp: updatedXp,
       diamonds: updatedGems,
@@ -269,9 +161,12 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       lastActiveDate: today,
       completedToday: true,
       completedLessons: updatedLessons,
-    });
+    };
 
-    // Check couple streak
+    setCurrentUser(updated);
+    saveRegisteredUser(updated);
+
+    // Update couple streak if partner is linked and completed today
     if (partner?.completedToday) {
       setCoupleStats((prev) => ({
         ...prev,
@@ -282,19 +177,23 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loseHeart = () => {
     if (!currentUser || currentUser.hearts <= 0) return;
-    setCurrentUser({
+    const updated: AuthUserProfile = {
       ...currentUser,
       hearts: Math.max(0, currentUser.hearts - 1),
-    });
+    };
+    setCurrentUser(updated);
+    saveRegisteredUser(updated);
   };
 
   const refillHearts = (): boolean => {
     if (!currentUser || currentUser.diamonds < 100) return false;
-    setCurrentUser({
+    const updated: AuthUserProfile = {
       ...currentUser,
       hearts: currentUser.maxHearts,
       diamonds: currentUser.diamonds - 100,
-    });
+    };
+    setCurrentUser(updated);
+    saveRegisteredUser(updated);
     return true;
   };
 
@@ -319,37 +218,32 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updateUserName = (newName: string) => {
     if (!currentUser || !newName.trim()) return;
-    setCurrentUser({
+    const updated: AuthUserProfile = {
       ...currentUser,
       name: newName.trim(),
-    });
+    };
+    setCurrentUser(updated);
+    saveRegisteredUser(updated);
   };
 
   const resetAllData = () => {
-    setCurrentUser(INITIAL_LEO);
-    setPartner({
-      name: 'Amor ❤️',
-      avatar: './mascot/certinho.png',
-      xp: 110,
-      streak: 4,
-      completedToday: false,
-      coupleCode: 'AMOR-2026',
-    });
-    setCoupleStats({ sharedStreak: 4 });
-    localStorage.removeItem('pacoca_current_user');
-    localStorage.removeItem('pacoca_partner_data');
-    localStorage.removeItem('pacoca_couple_stats_v2');
+    localStorage.removeItem('pacoca_current_user_v3');
+    localStorage.removeItem('pacoca_registered_users_v3');
+    localStorage.removeItem('pacoca_couple_stats_v3');
+    setCurrentUser(null);
+    setAllLearners([]);
+    setCoupleStats({ sharedStreak: 0 });
   };
 
   return (
     <UserContext.Provider
       value={{
         currentUser,
+        allLearners,
         partner,
         isAuthenticated: Boolean(currentUser),
         coupleStats,
-        loginAsUser,
-        loginWithGoogle,
+        loginUser,
         logout,
         linkPartnerCode,
         completeLesson,
