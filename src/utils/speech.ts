@@ -1,4 +1,4 @@
-// Browser Speech Recognition & Audio Input Helper with Permission Handling
+// Robust Speech Recognition & Microphone Utility for Paçoca English
 
 export interface SpeechRecognitionResult {
   transcript: string;
@@ -6,16 +6,15 @@ export interface SpeechRecognitionResult {
   confidence: number;
 }
 
-// Clean and normalize strings for robust accent/speech matching
 export function cleanSpokenText(text: string): string {
   return text
     .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?'"]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-// Check if browser supports Speech Recognition
 export function isSpeechSupported(): boolean {
   if (typeof window === 'undefined') return false;
   return Boolean(
@@ -23,25 +22,13 @@ export function isSpeechSupported(): boolean {
   );
 }
 
-// Request explicit microphone permissions
-export async function requestMicrophonePermission(): Promise<boolean> {
-  if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-    return false;
-  }
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    // Stop tracks immediately after getting permission
-    stream.getTracks().forEach((track) => track.stop());
-    return true;
-  } catch (err) {
-    console.warn('Microphone permission denied or not available:', err);
-    return false;
-  }
-}
-
-// Start listening and compare with expected phrase
+/**
+ * Start listening without abruptly killing audio tracks.
+ * Uses continuous mode and interim results to ensure the browser doesn't close prematurely.
+ */
 export function listenForPhrase(
   expectedPhrase: string,
+  onInterimText: (text: string) => void,
   onStatusChange: (status: 'listening' | 'processing' | 'error' | 'done', message?: string) => void,
   onResult: (result: SpeechRecognitionResult) => void
 ): () => void {
@@ -49,76 +36,102 @@ export function listenForPhrase(
     (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
   if (!SpeechRecognition) {
-    onStatusChange('error', 'Seu navegador não suporta reconhecimento de voz nativo.');
+    onStatusChange('error', 'Seu navegador não suporta reconhecimento de voz direto.');
     return () => {};
   }
 
   const recognition = new SpeechRecognition();
   recognition.lang = 'en-US';
-  recognition.continuous = false;
-  recognition.interimResults = false;
+  recognition.continuous = true;       // Keep alive while speaking!
+  recognition.interimResults = true;   // Show live speech!
   recognition.maxAlternatives = 3;
 
-  let hasEnded = false;
+  let stoppedManually = false;
+  let hasMatched = false;
+  let finalResultSent = false;
+  let speechTimeout: any = null;
+
+  const checkMatch = (spoken: string) => {
+    const cleanExpected = cleanSpokenText(expectedPhrase);
+    const cleanSpoken = cleanSpokenText(spoken);
+
+    if (cleanSpoken === cleanExpected || cleanSpoken.includes(cleanExpected) || cleanExpected.includes(cleanSpoken)) {
+      return true;
+    }
+
+    // Keyword match tolerance: 60% of expected words present
+    const expectedWords = cleanExpected.split(' ').filter(Boolean);
+    const spokenWords = cleanSpoken.split(' ').filter(Boolean);
+    const matches = expectedWords.filter((w) => spokenWords.includes(w));
+    if (expectedWords.length > 0 && matches.length / expectedWords.length >= 0.6) {
+      return true;
+    }
+
+    return false;
+  };
 
   recognition.onstart = () => {
     onStatusChange('listening');
+    // Safety auto-stop after 10 seconds if nothing spoken
+    speechTimeout = setTimeout(() => {
+      if (!stoppedManually && !hasMatched) {
+        try {
+          recognition.stop();
+        } catch {}
+      }
+    }, 10000);
   };
 
   recognition.onresult = (event: any) => {
-    hasEnded = true;
-    onStatusChange('processing');
+    let currentInterim = '';
+    let currentFinal = '';
 
-    const results = event.results[0];
-    let bestTranscript = results[0]?.transcript || '';
-    let highestConfidence = results[0]?.confidence || 0;
-
-    const cleanExpected = cleanSpokenText(expectedPhrase);
-    let isMatch = false;
-
-    // Check all alternatives
-    for (let i = 0; i < results.length; i++) {
-      const alt = cleanSpokenText(results[i].transcript);
-      if (alt === cleanExpected || alt.includes(cleanExpected) || cleanExpected.includes(alt)) {
-        isMatch = true;
-        bestTranscript = results[i].transcript;
-        highestConfidence = results[i].confidence || 0.9;
-        break;
+    for (let i = event.resultIndex; i < event.results.length; ++i) {
+      const trans = event.results[i][0].transcript;
+      if (event.results[i].isFinal) {
+        currentFinal += trans;
+      } else {
+        currentInterim += trans;
       }
     }
 
-    // Levenshtein / loose tolerance check: if 70% of words match
-    if (!isMatch) {
-      const expectedWords = cleanExpected.split(' ');
-      const spokenWords = cleanSpokenText(bestTranscript).split(' ');
-      const matchedWords = expectedWords.filter((w) => spokenWords.includes(w));
-      if (matchedWords.length / expectedWords.length >= 0.6) {
-        isMatch = true;
+    const liveText = (currentFinal || currentInterim).trim();
+    if (liveText) {
+      onInterimText(liveText);
+
+      // Check if match achieved live
+      if (checkMatch(liveText) && !hasMatched) {
+        hasMatched = true;
+        finalResultSent = true;
+        clearTimeout(speechTimeout);
+        try {
+          recognition.stop();
+        } catch {}
+        onStatusChange('done');
+        onResult({
+          transcript: liveText,
+          isMatch: true,
+          confidence: 0.95,
+        });
       }
     }
-
-    onStatusChange('done');
-    onResult({
-      transcript: bestTranscript,
-      isMatch,
-      confidence: highestConfidence,
-    });
   };
 
   recognition.onerror = (event: any) => {
-    if (hasEnded) return;
-    console.warn('Speech recognition error:', event.error);
+    console.warn('Speech recognition event error:', event.error);
+    clearTimeout(speechTimeout);
     if (event.error === 'not-allowed') {
-      onStatusChange('error', 'Permissão do microfone negada. Clique no ícone de cadeado do navegador para permitir o microfone.');
+      onStatusChange('error', 'Permissão de microfone negada. Clique no ícone de cadeado na barra de endereço do navegador e permita o microfone.');
     } else if (event.error === 'no-speech') {
-      onStatusChange('error', 'Nenhum som detectado. Tente falar um pouco mais perto do microfone.');
-    } else {
-      onStatusChange('error', `Erro ao ouvir (${event.error}). Tente novamente.`);
+      onStatusChange('error', 'Nenhuma fala detectada. Toque no microfone e fale com firmeza.');
+    } else if (event.error !== 'aborted') {
+      onStatusChange('error', `Aviso de áudio: ${event.error}. Tente novamente.`);
     }
   };
 
   recognition.onend = () => {
-    if (!hasEnded) {
+    clearTimeout(speechTimeout);
+    if (!finalResultSent && !stoppedManually) {
       onStatusChange('done');
     }
   };
@@ -126,15 +139,16 @@ export function listenForPhrase(
   try {
     recognition.start();
   } catch (err) {
-    onStatusChange('error', 'Não foi possível iniciar o microfone.');
+    console.warn('Recognition start exception:', err);
+    onStatusChange('error', 'Não foi possível iniciar o microfone no momento.');
   }
 
-  // Return abort / stop function
+  // Abort / Stop function
   return () => {
+    stoppedManually = true;
+    clearTimeout(speechTimeout);
     try {
       recognition.abort();
-    } catch {
-      // ignore
-    }
+    } catch {}
   };
 }

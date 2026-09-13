@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Volume2, Snail, Mic, CheckCircle2, XCircle, Heart, AlertCircle, RefreshCw } from 'lucide-react';
+import { X, Volume2, Snail, Mic, CheckCircle2, XCircle, Heart, RefreshCw, RotateCcw } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { motion } from 'framer-motion';
 import type { Lesson, Exercise } from '../data/courses';
@@ -7,7 +7,7 @@ import { useUser } from '../context/UserContext';
 import { Mascot } from './Mascot';
 import { sound, speakEnglish } from '../utils/audio';
 import type { MascotMood } from '../utils/mascot';
-import { listenForPhrase, requestMicrophonePermission, isSpeechSupported } from '../utils/speech';
+import { listenForPhrase, isSpeechSupported } from '../utils/speech';
 
 interface LessonModalProps {
   lesson: Lesson;
@@ -16,7 +16,15 @@ interface LessonModalProps {
 
 export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => {
   const { currentUser, completeLesson, loseHeart } = useUser();
+
+  // Active exercises list (can include review round)
+  const [exerciseList, setExerciseList] = useState<Exercise[]>(() => [...lesson.exercises]);
   const [currentIndex, setCurrentIndex] = useState(0);
+
+  // Review queue for missed exercises
+  const [reviewQueue, setReviewQueue] = useState<Exercise[]>([]);
+  const [isReviewMode, setIsReviewMode] = useState(false);
+
   const [status, setStatus] = useState<'answering' | 'correct' | 'incorrect' | 'completed'>('answering');
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [selectedWords, setSelectedWords] = useState<string[]>([]);
@@ -33,8 +41,8 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
   const [spokenTranscript, setSpokenTranscript] = useState<string>('');
   const abortSpeechRef = useRef<(() => void) | null>(null);
 
-  const currentExercise: Exercise = lesson.exercises[currentIndex];
-  const progressPercent = ((currentIndex) / lesson.exercises.length) * 100;
+  const currentExercise: Exercise = exerciseList[currentIndex];
+  const progressPercent = ((currentIndex) / exerciseList.length) * 100;
 
   // Initialize exercise state
   useEffect(() => {
@@ -68,8 +76,11 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
       }, 300);
     }
 
-    // Set mood based on hearts or combo
-    if (currentUser.hearts <= 1) {
+    // Set mood based on review mode, hearts or combo
+    if (isReviewMode) {
+      setMascotMood('tip');
+      setMascotSpeech('Hora de revisar! Vamos acertar as que ficaram para trás!');
+    } else if (currentUser.hearts <= 1) {
       setMascotMood('scared');
       setMascotSpeech('Cuidado, só resta 1 coraçãozinho!');
     } else if (combo >= 3) {
@@ -79,7 +90,7 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
       setMascotMood('official');
       setMascotSpeech(currentExercise.tip);
     }
-  }, [currentIndex]);
+  }, [currentIndex, isReviewMode]);
 
   // Clean up speech on unmount
   useEffect(() => {
@@ -146,32 +157,27 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
     }
   };
 
-  // Handle Speech Recognition with explicit mic permission check
-  const handleSpeechRecord = async () => {
+  // Handle Speech Recognition with continuous live capture
+  const handleSpeechRecord = () => {
     sound.playClick();
 
     if (!isSpeechSupported()) {
       setSpeechState('error');
-      setSpeechMessage('Seu navegador atual não suporta microfone direto. Você pode ouvir a pronúncia e praticar falando em voz alta!');
+      setSpeechMessage('Seu navegador não tem suporte a microfone direto. Toque em "Ouvir pronúncia nativa" e repita em voz alta!');
       return;
     }
-
-    // Request permission explicitly first
-    const hasPermission = await requestMicrophonePermission();
-    if (!hasPermission) {
-      setSpeechState('error');
-      setSpeechMessage('Permissão de microfone negada. Clique no ícone de cadeado do navegador para permitir o microfone.');
-      return;
-    }
-
-    const targetPhrase = currentExercise.englishPhrase || (currentExercise.correctAnswer as string);
 
     if (abortSpeechRef.current) {
       abortSpeechRef.current();
     }
 
+    const targetPhrase = currentExercise.englishPhrase || (currentExercise.correctAnswer as string);
+
     abortSpeechRef.current = listenForPhrase(
       targetPhrase,
+      (interim) => {
+        setSpokenTranscript(interim);
+      },
       (newStatus, msg) => {
         setSpeechState(newStatus);
         if (msg) setSpeechMessage(msg);
@@ -183,10 +189,18 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
         } else {
           sound.playError();
           setMascotMood('wrong');
-          setMascotSpeech('Não peguei perfeitamente. Ouça com atenção e tente falar de novo!');
+          setMascotSpeech('Quase lá! Tente pronunciar novamente mais perto do microfone.');
         }
       }
     );
+  };
+
+  const handleStopSpeech = () => {
+    if (abortSpeechRef.current) {
+      abortSpeechRef.current();
+      abortSpeechRef.current = null;
+    }
+    setSpeechState('done');
   };
 
   // Validate current answer
@@ -223,7 +237,7 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
     setStatus('correct');
     setCombo((c) => c + 1);
     setMascotMood('correct');
-    setMascotSpeech('Mandou super bem! Resposta perfeita!');
+    setMascotSpeech('Excelente! Resposta correta!');
   };
 
   const handleFail = () => {
@@ -232,23 +246,36 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
     setStatus('incorrect');
     setCombo(0);
     setMascotMood('wrong');
-    setMascotSpeech('Opa! Não foi dessa vez, mas bora prestar atenção na resposta!');
+    setMascotSpeech('Opa! Não se preocupe: você terá a chance de refazer esta questão no final da lição!');
+
+    // Add to review queue so user gets to redo it!
+    if (!reviewQueue.some((q) => q.id === currentExercise.id)) {
+      setReviewQueue((prev) => [...prev, currentExercise]);
+    }
   };
 
   const handleNext = () => {
-    if (currentIndex + 1 < lesson.exercises.length) {
+    if (currentIndex + 1 < exerciseList.length) {
       setCurrentIndex((prev) => prev + 1);
+    } else if (reviewQueue.length > 0) {
+      // START REVIEW ROUND FOR MISSED EXERCISES!
+      sound.playClick();
+      setExerciseList([...reviewQueue]);
+      setReviewQueue([]);
+      setCurrentIndex(0);
+      setIsReviewMode(true);
+      setMascotMood('tip');
+      setMascotSpeech('Hora de revisar! Vamos refazer as questões que você errou para fixar de vez!');
     } else {
-      // Completed lesson!
+      // COMPLETED EVERYTHING SUCCESSFULLY!
       setStatus('completed');
       sound.playVictory();
       setMascotMood('proud');
       completeLesson(lesson.id, lesson.xpReward);
 
-      // Trigger glorious confetti
       confetti({
-        particleCount: 120,
-        spread: 80,
+        particleCount: 140,
+        spread: 90,
         origin: { y: 0.6 },
       });
     }
@@ -262,7 +289,7 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
           <Mascot mood="scared" size="lg" className="mx-auto mb-4" />
           <h2 className="font-fredoka text-3xl text-rose-600 mb-2">Sem Vidas!</h2>
           <p className="text-slate-600 font-bold mb-6 text-sm">
-            Suas vidas acabaram nesta rodada! Recarregue suas vidas com gemas na loja ou descanse um pouco com o Paçoca.
+            Suas vidas acabaram nesta rodada! Recarregue suas vidas com gemas ou descanse um pouco antes de tentar novamente.
           </p>
           <button
             onClick={onClose}
@@ -285,20 +312,20 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
             animate={{ scale: 1, opacity: 1 }}
             transition={{ type: 'spring', stiffness: 300, damping: 20 }}
           >
-            <Mascot mood="proud" size="xl" speech="Parabéns! Você arrasou no inglês!" className="mb-4" />
+            <Mascot mood="proud" size="xl" speech="Parabéns! Você concluiu tudo com sucesso!" className="mb-4" />
           </motion.div>
 
           <h2 className="font-fredoka text-4xl text-amber-500 font-black mb-2">
             Lição Concluída!
           </h2>
           <p className="text-slate-600 font-bold text-base mb-8">
-            Você deu mais um passo gigante rumo à fluência rápida!
+            Você aprendeu todas as frases e acertou a revisão com louvor!
           </p>
 
           {/* Reward cards */}
           <div className="grid grid-cols-2 gap-4 w-full mb-8">
             <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 text-center">
-              <span className="text-xs font-black uppercase text-amber-700 tracking-wider">Total XP</span>
+              <span className="text-xs font-black uppercase text-amber-700 tracking-wider">XP Ganho</span>
               <div className="text-3xl font-black text-amber-600 mt-1">+{lesson.xpReward}</div>
             </div>
             <div className="bg-emerald-50 border-2 border-emerald-300 rounded-2xl p-4 text-center">
@@ -331,14 +358,23 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
           <X className="w-6 h-6 stroke-[3]" />
         </button>
 
-        {/* Progress Bar with shine effect */}
-        <div className="flex-1 h-3.5 bg-slate-200 rounded-full overflow-hidden relative">
-          <motion.div
-            className="h-full bg-emerald-500 rounded-full"
-            initial={{ width: 0 }}
-            animate={{ width: `${progressPercent}%` }}
-            transition={{ duration: 0.3 }}
-          />
+        {/* Progress Bar with Review Indicator */}
+        <div className="flex-1 flex flex-col">
+          <div className="h-3.5 bg-slate-200 rounded-full overflow-hidden relative">
+            <motion.div
+              className={`h-full rounded-full transition-all ${
+                isReviewMode ? 'bg-amber-500' : 'bg-emerald-500'
+              }`}
+              initial={{ width: 0 }}
+              animate={{ width: `${progressPercent}%` }}
+              transition={{ duration: 0.3 }}
+            />
+          </div>
+          {isReviewMode && (
+            <span className="text-[10px] font-black uppercase tracking-wider text-amber-600 mt-1 flex items-center gap-1">
+              <RotateCcw className="w-3 h-3" /> Rodada de Revisão (Refazendo os Erros)
+            </span>
+          )}
         </div>
 
         {/* Hearts */}
@@ -492,7 +528,7 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
           </div>
         )}
 
-        {/* Exercise Type 4: Speech Practice with Robust Microphone & Audio */}
+        {/* Exercise Type 4: Speech Practice with Live Continuous Capture */}
         {currentExercise.type === 'speech' && (
           <div className="text-center py-4 space-y-5">
             <div className="p-6 bg-sky-50 border-2 border-sky-200 rounded-3xl">
@@ -511,45 +547,54 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
               </button>
             </div>
 
-            {/* Microphone Button with Dynamic States */}
+            {/* Microphone Button with Dynamic Continuous States */}
             <div className="flex flex-col items-center">
-              <button
-                onClick={handleSpeechRecord}
-                className={`w-24 h-24 rounded-full flex items-center justify-center cursor-pointer transition-all shadow-lg ${
-                  speechState === 'listening'
-                    ? 'bg-rose-500 animate-pulse text-white scale-110'
-                    : speechState === 'processing'
-                    ? 'bg-amber-500 text-white'
-                    : 'btn-3d-blue'
-                }`}
-              >
-                {speechState === 'processing' ? (
-                  <RefreshCw className="w-10 h-10 animate-spin" />
-                ) : (
-                  <Mic className="w-10 h-10" />
-                )}
-              </button>
+              {speechState === 'listening' ? (
+                <button
+                  onClick={handleStopSpeech}
+                  className="w-24 h-24 rounded-full bg-rose-500 text-white flex items-center justify-center cursor-pointer shadow-lg animate-pulse scale-110"
+                  title="Clique para parar de gravar"
+                >
+                  <div className="w-8 h-8 bg-white rounded-lg" />
+                </button>
+              ) : (
+                <button
+                  onClick={handleSpeechRecord}
+                  className="w-24 h-24 rounded-full btn-3d-blue flex items-center justify-center cursor-pointer shadow-lg"
+                  title="Toque no microfone e fale"
+                >
+                  {speechState === 'processing' ? (
+                    <RefreshCw className="w-10 h-10 animate-spin text-white" />
+                  ) : (
+                    <Mic className="w-10 h-10 text-white" />
+                  )}
+                </button>
+              )}
 
               <span className="text-slate-700 font-black text-sm mt-3">
                 {speechState === 'listening'
-                  ? '🎙️ Gravando... Fale a frase agora!'
+                  ? '🎙️ Microfone ouvindo... Fale agora! (Toque no botão vermelho quando terminar)'
                   : speechState === 'processing'
-                  ? 'Avaliando pronúncia...'
+                  ? 'Avaliando o que você disse...'
                   : 'Toque no microfone para falar'}
               </span>
 
-              {/* Spoken result or message */}
+              {/* Live words being spoken */}
               {spokenTranscript && (
-                <p className="mt-2 text-sm font-extrabold text-slate-800 bg-slate-100 px-4 py-1.5 rounded-xl border border-slate-200">
-                  Você disse: "{spokenTranscript}"
-                </p>
+                <div className="mt-3 p-3 bg-emerald-50 border border-emerald-300 rounded-2xl max-w-sm">
+                  <span className="text-[11px] font-black uppercase text-emerald-700 block mb-0.5">
+                    Ouvido pelo sistema:
+                  </span>
+                  <p className="text-base font-black text-slate-800">
+                    "{spokenTranscript}"
+                  </p>
+                </div>
               )}
 
               {/* Error Message with Help */}
               {speechMessage && speechState === 'error' && (
-                <div className="mt-3 p-3 bg-amber-50 border border-amber-300 rounded-2xl max-w-sm text-xs text-amber-900 font-bold flex items-center gap-2">
-                  <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
-                  <span>{speechMessage}</span>
+                <div className="mt-3 p-3 bg-amber-50 border border-amber-300 rounded-2xl max-w-sm text-xs text-amber-900 font-bold text-center">
+                  {speechMessage}
                 </div>
               )}
             </div>
@@ -638,7 +683,7 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
                     Sensacional!
                   </h4>
                   <p className="text-xs sm:text-sm font-bold text-emerald-700">
-                    Resposta certa! Você está pegando o ritmo rápido.
+                    Resposta certa!
                   </p>
                 </div>
               </div>
@@ -658,6 +703,9 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
                         ? currentExercise.correctAnswer.join(' ')
                         : currentExercise.correctAnswer}
                     </span>
+                  </p>
+                  <p className="text-[11px] font-bold text-rose-600 mt-0.5">
+                    Você terá a chance de refazer esta questão no final da lição!
                   </p>
                 </div>
               </div>
