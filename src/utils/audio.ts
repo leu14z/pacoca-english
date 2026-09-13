@@ -1,4 +1,4 @@
-// Web Audio API Sound Synthesizer & Web Speech TTS for Paçoca English
+// Web Audio API Sound Synthesizer & High-Quality AI Voice Engine for Paçoca English
 
 class SoundController {
   private ctx: AudioContext | null = null;
@@ -18,7 +18,7 @@ class SoundController {
     try {
       this.initCtx();
       if (!this.ctx) return;
-      const notes = [523.25, 659.25, 783.99, 1046.5]; // C5, E5, G5, C6
+      const notes = [523.25, 659.25, 783.99, 1046.5];
       notes.forEach((freq, idx) => {
         const osc = this.ctx!.createOscillator();
         const gain = this.ctx!.createGain();
@@ -36,11 +36,11 @@ class SoundController {
         osc.stop(this.ctx!.currentTime + idx * 0.08 + 0.36);
       });
     } catch {
-      // Audio context might be restricted before interaction
+      // ignore
     }
   }
 
-  // Friendly soft error bonk (Eb3 -> Bb2)
+  // Friendly soft error bonk
   playError() {
     try {
       this.initCtx();
@@ -61,7 +61,7 @@ class SoundController {
       osc.start(this.ctx.currentTime);
       osc.stop(this.ctx.currentTime + 0.33);
     } catch {
-      // Audio suppressed
+      // ignore
     }
   }
 
@@ -86,20 +86,20 @@ class SoundController {
       osc.start(this.ctx.currentTime);
       osc.stop(this.ctx.currentTime + 0.08);
     } catch {
-      // Ignore
+      // ignore
     }
   }
 
-  // Triumphant Fanfare for lesson complete!
+  // Triumphant Fanfare for lesson complete
   playVictory() {
     try {
       this.initCtx();
       if (!this.ctx) return;
       const sequence = [
-        { f: 523.25, t: 0.0, d: 0.12 }, // C5
-        { f: 659.25, t: 0.14, d: 0.12 }, // E5
-        { f: 783.99, t: 0.28, d: 0.14 }, // G5
-        { f: 1046.5, t: 0.44, d: 0.4 },  // C6
+        { f: 523.25, t: 0.0, d: 0.12 },
+        { f: 659.25, t: 0.14, d: 0.12 },
+        { f: 783.99, t: 0.28, d: 0.14 },
+        { f: 1046.5, t: 0.44, d: 0.4 },
       ];
 
       sequence.forEach((item) => {
@@ -119,31 +119,95 @@ class SoundController {
         osc.stop(this.ctx!.currentTime + item.t + item.d + 0.01);
       });
     } catch {
-      // Ignore
+      // ignore
     }
   }
 }
 
 export const sound = new SoundController();
 
-// Text to Speech for native English voice
+// Preload and Cache Available Voices to avoid the empty array bug on page load
+let cachedVoices: SpeechSynthesisVoice[] = [];
+
+const loadVoices = () => {
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    cachedVoices = window.speechSynthesis.getVoices();
+  }
+};
+
+if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+  loadVoices();
+  window.speechSynthesis.onvoiceschanged = () => {
+    loadVoices();
+  };
+}
+
+/**
+ * Finds the highest quality Natural / Neural / AI human voice available in the browser.
+ * Filters out legacy robotic voices like Microsoft David.
+ */
+export function getBestNaturalVoice(): SpeechSynthesisVoice | null {
+  const voices = cachedVoices.length > 0 ? cachedVoices : (typeof window !== 'undefined' && 'speechSynthesis' in window ? window.speechSynthesis.getVoices() : []);
+  if (!voices || voices.length === 0) return null;
+
+  const englishVoices = voices.filter((v) => v.lang.startsWith('en'));
+  if (englishVoices.length === 0) return null;
+
+  // 1. Highest priority: Microsoft Natural / Azure Neural AI Voices (Jenny, Aria, Guy, Ryan, Sonia)
+  const naturalVoices = englishVoices.filter(
+    (v) =>
+      v.name.includes('Natural') ||
+      v.name.includes('Online (Natural)') ||
+      v.name.includes('Neural') ||
+      v.name.includes('Jenny') ||
+      v.name.includes('Aria') ||
+      v.name.includes('Guy')
+  );
+  if (naturalVoices.length > 0) {
+    return naturalVoices[0];
+  }
+
+  // 2. Google High Quality US/UK English
+  const googleVoices = englishVoices.filter((v) => v.name.includes('Google') && (v.lang === 'en-US' || v.lang === 'en-GB'));
+  if (googleVoices.length > 0) {
+    return googleVoices[0];
+  }
+
+  // 3. Apple High Quality voices (Samantha, Daniel, Victoria, Ava)
+  const appleVoices = englishVoices.filter(
+    (v) => v.name.includes('Samantha') || v.name.includes('Daniel') || v.name.includes('Ava')
+  );
+  if (appleVoices.length > 0) {
+    return appleVoices[0];
+  }
+
+  // 4. Any en-US voice that is not the ancient 'David'
+  const nonDavid = englishVoices.filter((v) => v.lang === 'en-US' && !v.name.includes('David'));
+  if (nonDavid.length > 0) return nonDavid[0];
+
+  return englishVoices[0];
+}
+
+/**
+ * Text to Speech with Natural Human/AI Voice Engine
+ */
 export function speakEnglish(text: string, slow: boolean = false) {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
     return;
   }
 
-  window.speechSynthesis.cancel(); // Cancel any ongoing speech
+  window.speechSynthesis.cancel(); // Stop any pending audio
 
-  const utterance = new SpeechSynthesisUtterance(text);
+  const cleanText = text.replace(/["'?!.,]/g, '').trim();
+
+  const utterance = new SpeechSynthesisUtterance(cleanText);
   utterance.lang = 'en-US';
-  utterance.rate = slow ? 0.65 : 0.95;
-  utterance.pitch = 1.05; // Slightly cheerful pitch
+  utterance.rate = slow ? 0.72 : 0.96;
+  utterance.pitch = 1.0;
 
-  // Attempt to select an English voice if available
-  const voices = window.speechSynthesis.getVoices();
-  const englishVoice = voices.find((v) => v.lang.startsWith('en') && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Samantha')));
-  if (englishVoice) {
-    utterance.voice = englishVoice;
+  const bestVoice = getBestNaturalVoice();
+  if (bestVoice) {
+    utterance.voice = bestVoice;
   }
 
   window.speechSynthesis.speak(utterance);
