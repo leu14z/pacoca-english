@@ -144,13 +144,13 @@ export interface SpeechSession {
 }
 
 /**
- * Starts standard Web Speech recognition WITHOUT hijacking device audio with getUserMedia.
- * Directly streams to speech engine for fast, accurate word transcription.
+ * Starts Web Speech recognition with continuous listening.
+ * NEVER emits a failing onResult on silence or microphone errors (never causes accidental heart loss).
  */
 export function startAccurateSpeechRecognition(
   expectedPhrase: string,
   onInterimText: (text: string) => void,
-  onStatusChange: (status: 'listening' | 'evaluating' | 'error' | 'done', message?: string) => void,
+  onStatusChange: (status: 'listening' | 'evaluating' | 'error' | 'no-speech' | 'done', message?: string) => void,
   onResult: (result: SpeechEvaluationResult) => void
 ): SpeechSession {
   const SpeechRecognition =
@@ -161,66 +161,110 @@ export function startAccurateSpeechRecognition(
     return { stop: () => {} };
   }
 
-  const recognition = new SpeechRecognition();
-  recognition.lang = 'en-US';
-  recognition.continuous = false; // Capture phrase cleanly until pause
-  recognition.interimResults = true; // Real-time feedback
-  recognition.maxAlternatives = 3;
-
+  let recognition: any = null;
   let finalTranscript = '';
-  let stopped = false;
+  let stoppedManually = false;
+  let hasTranscribedSpeech = false;
   let resultEmitted = false;
-
-  recognition.onstart = () => {
-    onStatusChange('listening');
-  };
-
-  recognition.onresult = (event: any) => {
-    let interim = '';
-    for (let i = event.resultIndex; i < event.results.length; ++i) {
-      const trans = event.results[i][0].transcript;
-      if (event.results[i].isFinal) {
-        finalTranscript = trans;
-      } else {
-        interim += trans;
-      }
-    }
-    const currentText = (finalTranscript || interim).trim();
-    if (currentText) {
-      onInterimText(currentText);
-    }
-  };
-
-  recognition.onerror = (event: any) => {
-    console.warn('Speech recognition error:', event.error);
-    if (stopped) return;
-
-    if (event.error === 'not-allowed') {
-      onStatusChange('error', 'Permissão do microfone bloqueada no navegador. Clique no cadeado na barra de endereços para permitir.');
-    } else if (event.error === 'no-speech') {
-      onStatusChange('error', 'Nenhum som de voz detectado. Fale com firmeza perto do microfone.');
-    } else if (event.error !== 'aborted') {
-      onStatusChange('error', `Erro do microfone: ${event.error}. Tente novamente.`);
-    }
-  };
-
-  recognition.onend = () => {
-    if (resultEmitted || stopped) return;
-    resultEmitted = true;
-    onStatusChange('evaluating');
-
-    // Strict evaluation against expected phrase
-    const evaluation = evaluateSpokenMatch(expectedPhrase, finalTranscript);
-    onStatusChange('done');
-    onResult({
-      transcript: finalTranscript,
-      isMatch: evaluation.isMatch,
-      score: evaluation.score,
-      feedback: evaluation.feedback,
-    });
-  };
+  let autoSilenceTimeout: any = null;
 
   try {
+    recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    // Continuous = true keeps the mic alive so it doesn't immediately drop out on brief silence!
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 3;
+
+    recognition.onstart = () => {
+      onStatusChange('listening');
+
+      // Safety timeout: if after 8 seconds no speech at all was captured, stop gracefully without penalty
+      autoSilenceTimeout = setTimeout(() => {
+        if (!hasTranscribedSpeech && !stoppedManually) {
+          stoppedManually = true;
+          try {
+            recognition.stop();
+          } catch {}
+          onStatusChange('no-speech', 'Nenhum som detectado. Toque no microfone e tente falar novamente.');
+        }
+      }, 8000);
+    };
+
+    recognition.onresult = (event: any) => {
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        const trans = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += ' ' + trans;
+        } else {
+          interim += trans;
+        }
+      }
+
+      const currentText = (finalTranscript + ' ' + interim).trim();
+      if (currentText) {
+        hasTranscribedSpeech = true;
+        onInterimText(currentText);
+
+        // If user spoke the phrase, evaluate automatically after a short pause!
+        const evalCheck = evaluateSpokenMatch(expectedPhrase, currentText);
+        if (evalCheck.isMatch && !resultEmitted) {
+          resultEmitted = true;
+          stoppedManually = true;
+          try {
+            recognition.stop();
+          } catch {}
+          clearTimeout(autoSilenceTimeout);
+          onStatusChange('done');
+          onResult({
+            transcript: currentText,
+            isMatch: true,
+            score: evalCheck.score,
+            feedback: evalCheck.feedback,
+          });
+        }
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      console.warn('Speech recognition notice:', event.error);
+      clearTimeout(autoSilenceTimeout);
+
+      if (event.error === 'no-speech') {
+        // Just silence: do not emit failure or take hearts!
+        onStatusChange('no-speech', 'Nenhum som de voz detectado. Fale com firmeza perto do microfone.');
+      } else if (event.error === 'not-allowed') {
+        onStatusChange('error', 'Permissão do microfone bloqueada no navegador. Clique no cadeado na barra de endereços para permitir.');
+      } else if (event.error !== 'aborted') {
+        onStatusChange('error', `Aviso do microfone: ${event.error}. Toque para tentar novamente.`);
+      }
+    };
+
+    recognition.onend = () => {
+      clearTimeout(autoSilenceTimeout);
+      if (resultEmitted) return;
+
+      const trimmed = finalTranscript.trim();
+      if (!trimmed) {
+        // No speech was detected: DO NOT PENALIZE THE USER!
+        onStatusChange('no-speech', 'Não ouvimos nenhum som. Toque no microfone e pronuncie a frase!');
+        return;
+      }
+
+      // Actual speech was captured: Evaluate rigorously
+      resultEmitted = true;
+      onStatusChange('evaluating');
+      const evaluation = evaluateSpokenMatch(expectedPhrase, trimmed);
+      onStatusChange('done');
+      onResult({
+        transcript: trimmed,
+        isMatch: evaluation.isMatch,
+        score: evaluation.score,
+        feedback: evaluation.feedback,
+      });
+    };
+
     recognition.start();
   } catch (err) {
     console.warn('Recognition start error:', err);
@@ -229,10 +273,13 @@ export function startAccurateSpeechRecognition(
 
   return {
     stop: () => {
-      stopped = true;
-      try {
-        recognition.stop();
-      } catch {}
+      stoppedManually = true;
+      clearTimeout(autoSilenceTimeout);
+      if (recognition) {
+        try {
+          recognition.stop();
+        } catch {}
+      }
     },
   };
 }

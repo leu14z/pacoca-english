@@ -177,13 +177,21 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
       (newStatus, msg) => {
         if (newStatus === 'listening') {
           setIsRecording(true);
-          setSpeechStatusMsg('Ouvindo... Fale a frase agora!');
+          setSpeechStatusMsg('🎙️ Ouvindo... Pode falar agora!');
+          setMascotMood('official');
         } else if (newStatus === 'evaluating') {
           setIsRecording(false);
           setSpeechStatusMsg('Avaliando pronúncia...');
+        } else if (newStatus === 'no-speech') {
+          setIsRecording(false);
+          setSpeechStatusMsg(msg || 'Não ouvimos nenhum som. Toque no microfone para falar.');
+          setMascotMood('tip');
+          setMascotSpeech('Não consegui te ouvir! Toque no microfone e fale perto dele.');
         } else if (newStatus === 'error') {
           setIsRecording(false);
-          setSpeechStatusMsg(msg || 'Erro no microfone.');
+          setSpeechStatusMsg(msg || 'Aviso do microfone.');
+          setMascotMood('surprised');
+          setMascotSpeech(msg || 'Verifique se o microfone está liberado no navegador.');
         } else if (newStatus === 'done') {
           setIsRecording(false);
         }
@@ -191,6 +199,14 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
       (result: SpeechEvaluationResult) => {
         setIsRecording(false);
         setEvaluationFeedback(result.feedback);
+
+        // Safety check: Never penalize empty transcript
+        if (!result.transcript || result.transcript.trim().length === 0) {
+          setSpeechStatusMsg('Nenhum som reconhecível. Toque no microfone para falar!');
+          setMascotMood('tip');
+          setMascotSpeech('Fale com firmeza perto do microfone.');
+          return;
+        }
 
         if (result.isMatch) {
           // Genuine match!
@@ -200,7 +216,7 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
           setMascotMood('correct');
           setMascotSpeech(`Sensacional! Pronúncia correta (${result.score}% de precisão)!`);
         } else {
-          // FAILED! Reject and require retry
+          // FAILED with actual wrong words!
           sound.playError();
           loseHeart();
           setStatus('incorrect');
