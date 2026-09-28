@@ -1,9 +1,8 @@
-import React from 'react';
-import { Star, Check, Lock, Sparkles, Compass } from 'lucide-react';
-import { COURSE_UNITS } from '../data/courses';
-import type { Lesson } from '../data/courses';
+import React, { useState } from 'react';
+import { Star, Check, Lock, Compass, ChevronLeft, ChevronRight, Layers } from 'lucide-react';
+import { COURSE_UNITS, COURSE_MODULES } from '../data/courses';
+import type { Lesson, CourseModule } from '../data/courses';
 import { useUser } from '../context/UserContext';
-import { Mascot } from './Mascot';
 import { sound } from '../utils/audio';
 
 interface LearnPathProps {
@@ -13,34 +12,50 @@ interface LearnPathProps {
 
 export const LearnPath: React.FC<LearnPathProps> = ({ onStartLesson, onOpenPlacementTest }) => {
   const { currentUser } = useUser();
+  const [activeModuleIndex, setActiveModuleIndex] = useState(0);
 
   if (!currentUser) return null;
 
   const isLessonCompleted = (id: string) => currentUser.completedLessons.includes(id);
 
-  // Offset pattern for the winding path
-  const getOffsetClass = (index: number) => {
-    const offsets = ['translate-x-0', '-translate-x-12', 'translate-x-12', '-translate-x-6', 'translate-x-8'];
-    return offsets[index % offsets.length];
+  const activeModule: CourseModule = COURSE_MODULES[activeModuleIndex] || COURSE_MODULES[0];
+  const activeUnits = COURSE_UNITS.filter((u) => activeModule.unitIds.includes(u.id));
+
+  // Count progress for active module
+  const totalModuleLessons = activeUnits.reduce((acc, u) => acc + u.lessons.length, 0);
+  const completedModuleLessons = activeUnits.reduce(
+    (acc, u) => acc + u.lessons.filter((l) => isLessonCompleted(l.id)).length,
+    0
+  );
+  const moduleProgressPercent = totalModuleLessons > 0 ? (completedModuleLessons / totalModuleLessons) * 100 : 0;
+
+  const handlePrevModule = () => {
+    sound.playClick();
+    if (activeModuleIndex > 0) setActiveModuleIndex(activeModuleIndex - 1);
+  };
+
+  const handleNextModule = () => {
+    sound.playClick();
+    if (activeModuleIndex < COURSE_MODULES.length - 1) setActiveModuleIndex(activeModuleIndex + 1);
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-10 pb-24">
+    <div className="max-w-3xl mx-auto space-y-6 pb-20">
       {/* Placement Test Interactive Banner */}
-      <div className="bg-linear-to-r from-indigo-600 via-sky-600 to-emerald-600 p-5 sm:p-6 rounded-3xl text-white shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4 border-2 border-white/20 relative overflow-hidden">
+      <div className="bg-linear-to-r from-indigo-600 via-sky-600 to-emerald-600 p-4 sm:p-5 rounded-3xl text-white shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4 border-2 border-white/20 relative overflow-hidden">
         <div className="flex items-center gap-3.5 relative z-10 text-left">
-          <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0 border border-white/30 shadow-inner">
+          <div className="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0 border border-white/30 shadow-inner">
             <Compass className="w-6 h-6 text-amber-300" />
           </div>
           <div>
             <span className="text-[10px] font-black uppercase tracking-widest text-sky-200 block">
-              {currentUser.placementCompleted ? `Nível Classificado: ${currentUser.level || 'A1'}` : 'Descubra seu Nível Oficial'}
+              {currentUser.placementCompleted ? `Nível Oficial: ${currentUser.level || 'A1'}` : 'Descubra seu Nível'}
             </span>
-            <h4 className="font-fredoka text-lg sm:text-xl font-black leading-tight text-white">
+            <h4 className="font-fredoka text-base sm:text-lg font-black leading-tight text-white">
               {currentUser.placementCompleted ? 'Refazer Teste de Nivelamento' : '🎯 Teste de Nivelamento Inicial'}
             </h4>
             <p className="text-white/90 text-xs font-semibold max-w-sm">
-              Quiz rápido de 12 perguntas (vocabulário, áudio e gramática) para você ou seus pais começarem no nível ideal!
+              Quiz rápido de 12 perguntas para alocar você ou seus pais no nível ideal (A1, A2 ou B1)!
             </p>
           </div>
         </div>
@@ -52,133 +67,242 @@ export const LearnPath: React.FC<LearnPathProps> = ({ onStartLesson, onOpenPlace
               sound.playClick();
               onOpenPlacementTest();
             }}
-            className="w-full sm:w-auto px-5 py-3 bg-white text-indigo-700 hover:bg-slate-100 font-black text-xs uppercase tracking-wider rounded-2xl cursor-pointer shadow-md transition-all active:scale-95 shrink-0 z-10"
+            className="w-full sm:w-auto px-4 py-2.5 bg-white text-indigo-700 hover:bg-slate-100 font-black text-xs uppercase tracking-wider rounded-2xl cursor-pointer shadow-md transition-all active:scale-95 shrink-0 z-10"
           >
-            {currentUser.placementCompleted ? 'Refazer Teste' : 'Fazer Teste Agora'}
+            {currentUser.placementCompleted ? 'Refazer Teste' : 'Iniciar Teste'}
           </button>
         )}
       </div>
-      {COURSE_UNITS.map((unit, unitIdx) => {
-        const prevUnit = COURSE_UNITS[unitIdx - 1];
-        const isNewModule = !prevUnit || prevUnit.moduleTitle !== unit.moduleTitle;
 
-        return (
-          <div key={unit.id} className="relative">
-            {/* Module Level Divider */}
-            {isNewModule && (
-              <div className="flex items-center justify-center gap-3 my-8">
-                <div className="h-0.5 bg-slate-300 flex-1" />
-                <span className="px-4 py-1.5 bg-slate-800 text-white rounded-full font-black text-xs uppercase tracking-widest flex items-center gap-2 shadow-xs">
-                  <Compass className="w-3.5 h-3.5 text-amber-400" />
-                  {unit.moduleTitle}
-                </span>
-                <div className="h-0.5 bg-slate-300 flex-1" />
-              </div>
-            )}
-
-            {/* Unit Header Banner */}
-            <div
-              className={`p-6 rounded-3xl text-white shadow-lg mb-8 relative overflow-hidden ${
-                unit.color === 'emerald'
-                  ? 'bg-emerald-500 border-b-6 border-emerald-600'
-                  : unit.color === 'sky'
-                  ? 'bg-sky-500 border-b-6 border-sky-600'
-                  : unit.color === 'rose'
-                  ? 'bg-rose-500 border-b-6 border-rose-600'
-                  : 'bg-amber-500 border-b-6 border-amber-600'
-              }`}
-            >
-              <div className="relative z-10">
-                <span className="text-xs font-black uppercase tracking-widest text-white/80 block mb-1">
-                  {unit.title.split(':')[0]}
-                </span>
-                <h3 className="font-fredoka text-2xl sm:text-3xl font-black mb-1">
-                  {unit.title.split(':')[1] || unit.title}
-                </h3>
-                <p className="text-white/90 text-sm font-bold max-w-md">
-                  {unit.subtitle}
-                </p>
-              </div>
-              {/* Sparkle background decoration */}
-              <Sparkles className="absolute -right-4 -bottom-4 w-32 h-32 text-white/10" />
+      {/* Modern Section Navigator (Horizontal Tabs - Stops Endless Scroll!) */}
+      <div className="bg-white border-2 border-slate-200 rounded-3xl p-4 shadow-sm space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-xl bg-slate-100 flex items-center justify-center text-slate-700">
+              <Layers className="w-4 h-4" />
             </div>
+            <span className="text-xs font-black uppercase tracking-wider text-slate-500">
+              Seletor de Módulos (Sem rolagem infinita)
+            </span>
+          </div>
 
-            {/* Lessons Path Nodes */}
-            <div className="flex flex-col items-center gap-8 relative">
-              {unit.lessons.map((lesson, lessonIdx) => {
-                const completed = isLessonCompleted(lesson.id);
-                const isFirstEver = unitIdx === 0 && lessonIdx === 0;
-                const prevLessonInUnit = unit.lessons[lessonIdx - 1];
-                const prevUnitLastLesson = prevUnit?.lessons[prevUnit.lessons.length - 1];
+          {/* Quick Prev / Next Arrows */}
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              disabled={activeModuleIndex === 0}
+              onClick={handlePrevModule}
+              className={`p-1.5 rounded-xl border border-slate-200 transition-colors ${
+                activeModuleIndex === 0
+                  ? 'opacity-30 cursor-not-allowed text-slate-400'
+                  : 'hover:bg-slate-100 text-slate-700 cursor-pointer'
+              }`}
+              title="Módulo anterior"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-xs font-bold text-slate-500 px-1">
+              {activeModuleIndex + 1}/{COURSE_MODULES.length}
+            </span>
+            <button
+              type="button"
+              disabled={activeModuleIndex === COURSE_MODULES.length - 1}
+              onClick={handleNextModule}
+              className={`p-1.5 rounded-xl border border-slate-200 transition-colors ${
+                activeModuleIndex === COURSE_MODULES.length - 1
+                  ? 'opacity-30 cursor-not-allowed text-slate-400'
+                  : 'hover:bg-slate-100 text-slate-700 cursor-pointer'
+              }`}
+              title="Próximo módulo"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
 
-                // Level placement unlocks
-                const userLevel = currentUser.level || 'A1';
-                const isUnlockedByLevel =
-                  (userLevel === 'B1' && lessonIdx === 0) ||
-                  (userLevel === 'A2' && unitIdx <= 4 && lessonIdx === 0) ||
-                  isFirstEver;
+        {/* Scrollable Module Pills */}
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+          {COURSE_MODULES.map((mod, idx) => {
+            const isCurrent = idx === activeModuleIndex;
+            return (
+              <button
+                key={mod.id}
+                type="button"
+                onClick={() => {
+                  sound.playClick();
+                  setActiveModuleIndex(idx);
+                }}
+                className={`px-4 py-2.5 rounded-2xl text-left shrink-0 transition-all cursor-pointer flex items-center gap-2.5 border-2 ${
+                  isCurrent
+                    ? 'bg-slate-900 border-slate-900 text-white shadow-md scale-102'
+                    : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700'
+                }`}
+              >
+                <span
+                  className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
+                    isCurrent ? 'bg-amber-400 text-slate-900' : 'bg-slate-200 text-slate-700'
+                  }`}
+                >
+                  {mod.level}
+                </span>
+                <span className="text-xs font-black truncate max-w-[160px]">
+                  {mod.shortTitle}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
-                const isLocked = !completed && !isUnlockedByLevel && (
-                  lessonIdx > 0
-                    ? !isLessonCompleted(prevLessonInUnit?.id || '')
-                    : !isLessonCompleted(prevUnitLastLesson?.id || '')
-                );
+      {/* Active Module Focused Card & Progress */}
+      <div className="bg-white border-2 border-slate-200 rounded-3xl p-6 shadow-sm relative overflow-hidden">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-0.5 bg-sky-100 text-sky-800 rounded-lg text-xs font-black uppercase tracking-wider">
+                Nível {activeModule.level}
+              </span>
+              <span className="text-xs font-bold text-slate-400">
+                {activeUnits.length} {activeUnits.length === 1 ? 'Unidade' : 'Unidades'} • {totalModuleLessons} Lições
+              </span>
+            </div>
+            <h2 className="font-fredoka text-2xl sm:text-3xl font-black text-slate-800">
+              {activeModule.title}
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-500 font-medium max-w-lg">
+              {activeModule.subtitle}
+            </p>
+          </div>
 
-                const isActive = !isLocked && !completed;
-                const offset = getOffsetClass(lessonIdx);
-
-                return (
-                  <div key={lesson.id} className={`flex flex-col items-center relative transition-transform ${offset}`}>
-                    {/* Floating Mascot cheering near active lesson */}
-                    {isActive && (
-                      <div className="absolute -right-28 -top-6 hidden sm:block">
-                        <Mascot mood="official" size="sm" speech="Sua vez! Bora lá!" />
-                      </div>
-                    )}
-
-                    {/* Circular 3D Lesson Node */}
-                    <button
-                      disabled={isLocked}
-                      onClick={() => {
-                        sound.playClick();
-                        onStartLesson(lesson);
-                      }}
-                      className={`w-20 h-20 rounded-full flex flex-col items-center justify-center relative cursor-pointer transition-transform active:scale-95 shadow-md ${
-                        completed
-                          ? 'bg-amber-400 border-4 border-amber-300 border-b-8 border-b-amber-500 text-white'
-                          : isLocked
-                          ? 'bg-slate-200 border-4 border-slate-300 border-b-8 border-b-slate-400 text-slate-400 cursor-not-allowed'
-                          : 'bg-emerald-500 border-4 border-emerald-300 border-b-8 border-b-emerald-600 text-white animate-pulse'
-                      }`}
-                    >
-                      {completed ? (
-                        <Check className="w-9 h-9 stroke-[3]" />
-                      ) : isLocked ? (
-                        <Lock className="w-8 h-8" />
-                      ) : (
-                        <Star className="w-9 h-9 fill-white text-white" />
-                      )}
-
-                      {/* Mini label for completed lessons */}
-                      {completed && (
-                        <span className="absolute -top-2 bg-amber-100 text-amber-800 text-[10px] font-black px-2 py-0.5 rounded-full border border-amber-300">
-                          COMPLETO
-                        </span>
-                      )}
-                    </button>
-
-                    {/* Title tooltip under node */}
-                    <div className="mt-2 text-center max-w-[180px]">
-                      <h4 className="font-black text-slate-800 text-sm">{lesson.title}</h4>
-                      <span className="text-[11px] font-bold text-slate-400">+{lesson.xpReward} XP</span>
-                    </div>
-                  </div>
-                );
-              })}
+          {/* Module Progress Dial */}
+          <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-200 shrink-0">
+            <div className="text-right">
+              <span className="text-[10px] font-black uppercase text-slate-400 block">Progresso</span>
+              <span className="text-sm font-black text-slate-800">
+                {completedModuleLessons}/{totalModuleLessons} Feitas
+              </span>
+            </div>
+            <div className="w-10 h-10 rounded-full border-4 border-slate-200 flex items-center justify-center font-black text-xs text-sky-600">
+              {Math.round(moduleProgressPercent)}%
             </div>
           </div>
-        );
-      })}
+        </div>
+
+        {/* Focused Units & Lessons of ONLY this active module */}
+        <div className="space-y-10 pt-6">
+          {activeUnits.map((unit, unitIdx) => (
+            <div key={unit.id} className="space-y-6">
+              {/* Unit Tag */}
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-slate-700 font-black text-xs">
+                  {unitIdx + 1}
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-800">
+                    {unit.title}
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    {unit.subtitle}
+                  </p>
+                </div>
+              </div>
+
+              {/* Lesson Nodes (Compact, tactile, no endless scroll) */}
+              <div className="flex flex-wrap items-center justify-center gap-6 py-4">
+                {unit.lessons.map((lesson, lessonIdx) => {
+                  const completed = isLessonCompleted(lesson.id);
+                  const isFirstEver = unitIdx === 0 && lessonIdx === 0 && activeModuleIndex === 0;
+
+                  // Level placement unlock check
+                  const userLevel = currentUser.level || 'A1';
+                  const isUnlockedByLevel =
+                    userLevel === 'B1' ||
+                    (userLevel === 'A2' && activeModule.level !== 'B1') ||
+                    isFirstEver;
+
+                  const prevLesson = unit.lessons[lessonIdx - 1];
+                  const isLocked = !completed && !isUnlockedByLevel && (
+                    lessonIdx > 0 ? !isLessonCompleted(prevLesson?.id || '') : false
+                  );
+
+                  const isActive = !isLocked && !completed;
+
+                  return (
+                    <div
+                      key={lesson.id}
+                      className="flex flex-col items-center gap-2 group relative text-center"
+                    >
+                      {/* Node Button */}
+                      <button
+                        type="button"
+                        disabled={isLocked}
+                        onClick={() => {
+                          sound.playClick();
+                          onStartLesson(lesson);
+                        }}
+                        className={`w-20 h-20 rounded-full flex flex-col items-center justify-center cursor-pointer transition-transform active:scale-95 shadow-md ${
+                          completed
+                            ? 'bg-amber-400 border-4 border-amber-300 border-b-6 border-b-amber-500 text-white'
+                            : isLocked
+                            ? 'bg-slate-200 border-4 border-slate-300 border-b-6 border-b-slate-400 text-slate-400 cursor-not-allowed'
+                            : isActive
+                            ? 'bg-emerald-500 border-4 border-emerald-300 border-b-6 border-b-emerald-600 text-white animate-pulse'
+                            : 'bg-slate-200 text-slate-400'
+                        }`}
+                        title={lesson.title}
+                      >
+                        {completed ? (
+                          <Check className="w-8 h-8 stroke-[3]" />
+                        ) : isLocked ? (
+                          <Lock className="w-7 h-7" />
+                        ) : (
+                          <Star className="w-8 h-8 fill-white text-white" />
+                        )}
+                      </button>
+
+                      {/* Lesson Name & XP */}
+                      <div className="max-w-[130px]">
+                        <span className="text-xs font-black text-slate-700 block truncate" title={lesson.title}>
+                          {lesson.title}
+                        </span>
+                        <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full inline-block mt-0.5">
+                          +{lesson.xpReward} XP
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Bottom Module Switcher Helper */}
+        <div className="mt-8 pt-5 border-t border-slate-100 flex items-center justify-between">
+          <button
+            type="button"
+            disabled={activeModuleIndex === 0}
+            onClick={handlePrevModule}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              activeModuleIndex === 0
+                ? 'opacity-40 cursor-not-allowed text-slate-400'
+                : 'text-slate-600 hover:bg-slate-100 cursor-pointer'
+            }`}
+          >
+            ← Módulo Anterior
+          </button>
+
+          {activeModuleIndex < COURSE_MODULES.length - 1 && (
+            <button
+              type="button"
+              onClick={handleNextModule}
+              className="px-5 py-2.5 bg-sky-500 hover:bg-sky-600 text-white font-black text-xs uppercase tracking-wider rounded-xl cursor-pointer shadow-md transition-all active:scale-95"
+            >
+              Próximo Módulo →
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 };

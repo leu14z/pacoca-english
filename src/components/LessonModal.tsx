@@ -335,19 +335,31 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
       </div>
 
       {/* Main Exercise View */}
-      <div className="flex-1 max-w-2xl w-full mx-auto px-4 py-6 overflow-y-auto flex flex-col justify-center">
+      <div className="flex-1 max-w-2xl w-full mx-auto px-4 py-4 sm:py-6 overflow-y-auto flex flex-col justify-center">
+        {/* Activity Category Tag */}
+        <div className="flex items-center gap-2 mb-3">
+          <span className="px-3 py-1 bg-sky-100 text-sky-800 rounded-full font-black text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-2xs">
+            {currentExercise.type === 'word-bank' && '🧩 Monte a Frase'}
+            {currentExercise.type === 'listen-bank' && '🎧 Audição & Montagem'}
+            {currentExercise.type === 'multiple-choice' && '📝 Escolha a Opção'}
+            {currentExercise.type === 'match-pairs' && '🔗 Conecte os Pares'}
+            {currentExercise.type === 'speech' && '🗣️ Treino de Fala'}
+            {currentExercise.type === 'dialogue' && '💬 Conversação Real'}
+          </span>
+        </div>
+
         {/* Exercise Prompt */}
-        <h3 className="font-extrabold text-xl sm:text-2xl text-slate-800 mb-6">
+        <h3 className="font-extrabold text-xl sm:text-2xl text-slate-800 mb-4 sm:mb-6 leading-tight">
           {currentExercise.prompt}
         </h3>
 
         {/* Portuguese phrase reference if applicable */}
         {currentExercise.portuguesePhrase && currentExercise.type !== 'dialogue' && (
-          <div className="mb-6 p-4 bg-slate-100 rounded-2xl border-2 border-slate-200">
-            <span className="text-xs font-black uppercase text-slate-500 tracking-wider block mb-1">
-              Em Português:
+          <div className="mb-6 p-4 sm:p-5 bg-slate-50 rounded-2xl border-2 border-slate-200 shadow-2xs">
+            <span className="text-xs font-black uppercase text-slate-400 tracking-wider block mb-1">
+              Tradução / Significado:
             </span>
-            <p className="text-lg sm:text-xl font-bold text-slate-800">
+            <p className="text-lg sm:text-xl font-black text-slate-800">
               "{currentExercise.portuguesePhrase}"
             </p>
           </div>
@@ -361,20 +373,20 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
                 sound.playClick();
                 speakEnglish(currentExercise.audioText!);
               }}
-              className="p-4 btn-3d-blue rounded-2xl cursor-pointer flex items-center gap-2 font-black"
+              className="p-4 btn-3d-blue rounded-2xl cursor-pointer flex items-center gap-2 font-black shadow-md active:scale-95 transition-all"
             >
-              <Volume2 className="w-8 h-8" />
-              <span>Ouvir</span>
+              <Volume2 className="w-7 h-7" />
+              <span className="text-base font-black">Ouvir Áudio</span>
             </button>
             <button
               onClick={() => {
                 sound.playClick();
                 speakEnglish(currentExercise.audioText!, true);
               }}
-              className="p-4 bg-amber-100 hover:bg-amber-200 border-2 border-amber-300 rounded-2xl cursor-pointer text-amber-800"
+              className="p-4 bg-amber-100 hover:bg-amber-200 border-2 border-amber-300 rounded-2xl cursor-pointer text-amber-800 shadow-2xs active:scale-95 transition-all"
               title="Ouvir devagar"
             >
-              <Snail className="w-8 h-8" />
+              <Snail className="w-7 h-7" />
             </button>
           </div>
         )}
@@ -383,30 +395,30 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
         {(currentExercise.type === 'word-bank' || currentExercise.type === 'listen-bank') && (
           <div className="space-y-6">
             {/* Selected Words Line */}
-            <div className="min-h-16 p-3 border-b-2 border-slate-300 flex flex-wrap gap-2 items-center">
+            <div className="min-h-20 p-4 border-2 border-dashed border-slate-300 rounded-2xl bg-slate-50 flex flex-wrap gap-2.5 items-center">
               {selectedWords.map((word, idx) => (
                 <button
                   key={`${word}-${idx}`}
                   onClick={() => handleWordDeselect(word, idx)}
-                  className="px-4 py-2.5 bg-white border-2 border-slate-300 rounded-2xl font-bold text-base text-slate-800 shadow-sm hover:border-rose-400 cursor-pointer transition-all active:scale-95"
+                  className="px-4 py-2.5 bg-white border-2 border-slate-300 border-b-4 border-b-slate-400 rounded-2xl font-black text-base text-slate-800 shadow-sm hover:border-rose-400 cursor-pointer transition-all active:scale-95"
                 >
                   {word}
                 </button>
               ))}
               {selectedWords.length === 0 && (
-                <span className="text-slate-400 text-sm font-semibold">
-                  Toque nas palavras abaixo para montar a frase...
+                <span className="text-slate-400 text-sm font-bold italic">
+                  Toque nos blocos abaixo para encaixar as palavras em ordem...
                 </span>
               )}
             </div>
 
             {/* Available Words Pool */}
-            <div className="flex flex-wrap gap-2 justify-center pt-4">
+            <div className="flex flex-wrap gap-2.5 justify-center pt-2">
               {availableWords.map((word, idx) => (
                 <button
                   key={`${word}-${idx}`}
                   onClick={() => handleWordSelect(word, idx)}
-                  className="px-4 py-2.5 bg-white border-2 border-slate-200 border-b-4 border-b-slate-300 rounded-2xl font-bold text-base text-slate-700 hover:bg-slate-50 cursor-pointer active:border-b-2 active:translate-y-0.5 transition-all"
+                  className="px-5 py-3 bg-white border-2 border-slate-200 border-b-4 border-b-slate-300 rounded-2xl font-black text-base text-slate-700 hover:bg-slate-50 cursor-pointer active:border-b-2 active:translate-y-0.5 transition-all shadow-xs"
                 >
                   {word}
                 </button>
@@ -420,6 +432,8 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
           <div className="space-y-3">
             {currentExercise.options?.map((opt, idx) => {
               const isSelected = selectedAnswer === opt;
+              const letter = String.fromCharCode(65 + idx);
+
               return (
                 <button
                   key={idx}
@@ -428,20 +442,32 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
                     setSelectedAnswer(opt);
                     if (currentExercise.audioText) speakEnglish(opt);
                   }}
-                  className={`w-full p-4 text-left rounded-2xl font-extrabold text-base transition-all cursor-pointer ${
-                    isSelected ? 'btn-3d-selected' : 'btn-3d-card text-slate-700'
+                  className={`w-full p-4 sm:p-5 text-left rounded-2xl font-extrabold text-base transition-all cursor-pointer flex items-center justify-between border-2 border-b-4 ${
+                    isSelected
+                      ? 'border-sky-500 bg-sky-50 text-sky-800 border-b-sky-600 shadow-md scale-101'
+                      : 'border-slate-200 hover:bg-slate-50 text-slate-700 border-b-slate-300'
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <span>{opt}</span>
-                    <Volume2
-                      className="w-5 h-5 opacity-40 hover:opacity-100"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        speakEnglish(opt);
-                      }}
-                    />
+                  <div className="flex items-center gap-3.5">
+                    <span
+                      className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-xs shrink-0 border-2 ${
+                        isSelected
+                          ? 'bg-sky-500 border-sky-600 text-white'
+                          : 'bg-slate-100 border-slate-300 text-slate-600'
+                      }`}
+                    >
+                      {letter}
+                    </span>
+                    <span className="text-base sm:text-lg font-black">{opt}</span>
                   </div>
+
+                  <Volume2
+                    className="w-5 h-5 opacity-40 hover:opacity-100 hover:text-sky-600 shrink-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      speakEnglish(opt);
+                    }}
+                  />
                 </button>
               );
             })}

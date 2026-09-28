@@ -653,3 +653,77 @@ export const COURSE_UNITS: Unit[] = [
   },
 ];
 
+export interface CourseModule {
+  id: string;
+  number: number;
+  title: string;
+  shortTitle: string;
+  level: 'A1' | 'A2' | 'B1';
+  subtitle: string;
+  color: string;
+  unitIds: string[];
+}
+
+export const COURSE_MODULES: CourseModule[] = [
+  {
+    id: 'module-1',
+    number: 1,
+    title: 'Módulo 1: Nível Zero (Primeiro Contato)',
+    shortTitle: 'Primeiros Passos & Família',
+    level: 'A1',
+    subtitle: 'Palavras essenciais, saudações e como apresentar você e quem você ama.',
+    color: 'emerald',
+    unitIds: ['unit-1', 'unit-2'],
+  },
+  {
+    id: 'module-2',
+    number: 2,
+    title: 'Módulo 2: Dia a Dia & Restaurante',
+    shortTitle: 'Restaurante & Comida',
+    level: 'A2',
+    subtitle: 'Faça pedidos, converse com garçons e peça a conta com elegância.',
+    color: 'rose',
+    unitIds: ['unit-3'],
+  },
+  {
+    id: 'module-3',
+    number: 3,
+    title: 'Módulo 3: Viagens & Aeroporto',
+    shortTitle: 'Aeroporto & Imigração',
+    level: 'A2',
+    subtitle: 'Cartão de embarque, portão, alfândega e desembarque seguro.',
+    color: 'amber',
+    unitIds: ['unit-4'],
+  },
+  {
+    id: 'module-4',
+    number: 4,
+    title: 'Módulo 4: Hotel & Hospedagem',
+    shortTitle: 'Hotel & Check-in',
+    level: 'A2',
+    subtitle: 'Faça check-in, peça a senha do Wi-Fi e tire dúvidas na recepção.',
+    color: 'sky',
+    unitIds: ['unit-5'],
+  },
+  {
+    id: 'module-5',
+    number: 5,
+    title: 'Módulo 5: Trabalho & Carreira',
+    shortTitle: 'Reuniões & E-mails',
+    level: 'B1',
+    subtitle: 'Comunique-se em reuniões e colabore profissionalmente em inglês.',
+    color: 'indigo',
+    unitIds: ['unit-6'],
+  },
+  {
+    id: 'module-6',
+    number: 6,
+    title: 'Módulo 6: Conversação Fluente & Gírias',
+    shortTitle: 'Expressões Nativas',
+    level: 'B1',
+    subtitle: 'Idioms e gírias do dia a dia para soar natural como um nativo.',
+    color: 'purple',
+    unitIds: ['unit-7'],
+  },
+];
+
