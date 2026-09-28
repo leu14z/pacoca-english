@@ -46,9 +46,14 @@ export async function signOutSupabase() {
 export async function syncUserProfile(profile: AuthUserProfile) {
   if (!supabase) return;
 
+  const validId =
+    profile.id && profile.id.includes('-') && profile.id.length >= 32
+      ? profile.id
+      : crypto.randomUUID();
+
   try {
     const { error } = await supabase.from('profiles').upsert({
-      id: profile.id,
+      id: validId,
       full_name: profile.name,
       email: profile.email,
       avatar_url: profile.avatar,

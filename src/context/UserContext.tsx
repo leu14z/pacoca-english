@@ -41,7 +41,12 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const saved = localStorage.getItem('pacoca_current_user_v3');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed.id === 'string' && (!parsed.id.includes('-') || parsed.id.length < 32)) {
+          parsed.id = crypto.randomUUID();
+          localStorage.setItem('pacoca_current_user_v3', JSON.stringify(parsed));
+        }
+        return parsed;
       } catch {
         // fallback
       }
