@@ -77,3 +77,52 @@ export const loadGoogleGsiScript = (): Promise<boolean> => {
     document.head.appendChild(script);
   });
 };
+
+/**
+ * Redirect browser directly to accounts.google.com OAuth 2.0 flow
+ */
+export function redirectToGoogleOAuth(clientId: string) {
+  const redirectUri = window.location.origin + window.location.pathname;
+  const scope = 'openid email profile';
+  const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(
+    clientId
+  )}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent(
+    scope
+  )}&prompt=select_account`;
+  window.location.href = url;
+}
+
+/**
+ * Check if the current URL hash contains an OAuth access token from accounts.google.com
+ */
+export async function checkGoogleOAuthCallback(): Promise<{
+  email: string;
+  name: string;
+  avatar?: string;
+} | null> {
+  const hash = window.location.hash;
+  if (!hash || !hash.includes('access_token')) return null;
+
+  try {
+    const params = new URLSearchParams(hash.substring(1));
+    const accessToken = params.get('access_token');
+    if (!accessToken) return null;
+
+    const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      window.history.replaceState(null, '', window.location.pathname);
+      return {
+        email: data.email,
+        name: data.name || data.given_name || data.email.split('@')[0],
+        avatar: data.picture,
+      };
+    }
+  } catch (err) {
+    console.warn('Error fetching Google profile from access token:', err);
+  }
+  return null;
+}

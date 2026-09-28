@@ -1,125 +1,142 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, Mail, User, ArrowRight, X, Sparkles, CheckCircle2 } from 'lucide-react';
+import { ShieldCheck, Sparkles, CheckCircle2, Settings, Key, AlertCircle } from 'lucide-react';
 import { useUser } from '../context/UserContext';
 import { Mascot } from './Mascot';
 import { PacocaBadge } from './PacocaBadge';
 import { sound } from '../utils/audio';
-import { loadGoogleGsiScript, parseJwt } from '../services/auth';
+import {
+  loadGoogleGsiScript,
+  parseJwt,
+  redirectToGoogleOAuth,
+  checkGoogleOAuthCallback,
+} from '../services/auth';
 import { signInWithGoogle, isSupabaseConfigured } from '../services/supabase';
-
-interface QuickGoogleProfile {
-  name: string;
-  email: string;
-  avatarBg: string;
-  initial: string;
-  badge: string;
-}
-
-const QUICK_ACCOUNTS: QuickGoogleProfile[] = [
-  {
-    name: 'Leo',
-    email: 'leo@gmail.com',
-    avatarBg: 'bg-emerald-500',
-    initial: 'L',
-    badge: 'Conta Principal',
-  },
-  {
-    name: 'Amor',
-    email: 'namorada@gmail.com',
-    avatarBg: 'bg-rose-500',
-    initial: 'A',
-    badge: 'Parceiro(a)',
-  },
-];
 
 export const LoginScreen: React.FC = () => {
   const { loginUser } = useUser();
-  const [showChooserModal, setShowChooserModal] = useState(false);
-  const [isCustomMode, setIsCustomMode] = useState(false);
-  const [customEmail, setCustomEmail] = useState('');
-  const [customName, setCustomName] = useState('');
-  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [googleClientId, setGoogleClientId] = useState<string>(() => {
+    return (
+      (window as any).VITE_GOOGLE_CLIENT_ID ||
+      localStorage.getItem('pacoca_google_client_id') ||
+      import.meta.env.VITE_GOOGLE_CLIENT_ID ||
+      ''
+    );
+  });
+  const [tempClientId, setTempClientId] = useState('');
 
-  // Initialize official Google Identity Services script if configured
+  // 1. Check if returning from Google OAuth redirect with access_token in URL hash
+  useEffect(() => {
+    checkGoogleOAuthCallback().then((profile) => {
+      if (profile) {
+        sound.playSuccess();
+        loginUser(profile.email, profile.name, profile.avatar);
+      }
+    });
+  }, [loginUser]);
+
+  // 2. Initialize Google Identity Services (GSI) official button and One-Tap
   useEffect(() => {
     loadGoogleGsiScript().then((ready) => {
-      const googleClientId =
-        (window as any).VITE_GOOGLE_CLIENT_ID ||
-        localStorage.getItem('pacoca_google_client_id') ||
-        import.meta.env.VITE_GOOGLE_CLIENT_ID;
-
       if (ready && googleClientId && (window as any).google?.accounts?.id) {
         try {
           (window as any).google.accounts.id.initialize({
             client_id: googleClientId,
             callback: (response: any) => {
               const payload = parseJwt(response.credential);
-              if (payload) {
+              if (payload?.email) {
                 sound.playSuccess();
                 loginUser(payload.email, payload.name, payload.picture);
               }
             },
+            auto_select: false,
           });
-          const buttonDiv = document.getElementById('googleGsiDiv');
+
+          // Render official Google Sign-In button if element exists
+          const buttonDiv = document.getElementById('officialGoogleButtonDiv');
           if (buttonDiv) {
+            buttonDiv.innerHTML = '';
             (window as any).google.accounts.id.renderButton(buttonDiv, {
               theme: 'outline',
               size: 'large',
-              width: '100%',
+              width: 320,
               text: 'continue_with',
               shape: 'pill',
+              logo_alignment: 'left',
             });
           }
-        } catch (e) {
-          console.warn('Google GSI init notice:', e);
+
+          // Optional: Google One Tap prompt
+          (window as any).google.accounts.id.prompt();
+        } catch (err) {
+          console.warn('Google GSI initialization error:', err);
         }
       }
     });
-  }, [loginUser]);
+  }, [googleClientId, loginUser]);
 
-  // Handle Google primary button click
-  const handleGoogleClick = async () => {
+  // Handle Official Google Sign-In click
+  const handleGoogleSignIn = async () => {
     sound.playClick();
-    setIsSigningIn(true);
+    setIsLoading(true);
+    setErrorMessage(null);
 
-    // If Supabase OAuth with Google is configured in .env, attempt redirect
+    // Option A: Supabase Auth with Google OAuth
     if (isSupabaseConfigured) {
       try {
         const { error } = await signInWithGoogle();
-        if (!error) {
-          // Redirecting to Google OAuth...
-          return;
+        if (error) {
+          setErrorMessage(error.message);
+          setIsLoading(false);
         }
-      } catch (err) {
-        console.warn('Supabase OAuth notice:', err);
+        return;
+      } catch (err: any) {
+        setErrorMessage(err?.message || 'Falha ao conectar ao Supabase.');
+        setIsLoading(false);
+        return;
       }
     }
 
-    // Open authentic Google Account Chooser dialog
-    setIsSigningIn(false);
-    setShowChooserModal(true);
+    // Option B: Google Client ID with OAuth / GSI
+    if (googleClientId) {
+      try {
+        if ((window as any).google?.accounts?.id) {
+          (window as any).google.accounts.id.prompt((notification: any) => {
+            if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+              // Fallback to direct Google OAuth 2.0 redirect
+              redirectToGoogleOAuth(googleClientId);
+            }
+          });
+        } else {
+          redirectToGoogleOAuth(googleClientId);
+        }
+      } catch (err) {
+        redirectToGoogleOAuth(googleClientId);
+      }
+      return;
+    }
+
+    // Option C: No credentials configured yet -> prompt configuration
+    setIsLoading(false);
+    setShowConfigModal(true);
   };
 
-  // Quick login with chosen profile
-  const handleSelectQuickAccount = (profile: QuickGoogleProfile) => {
-    sound.playSuccess();
-    loginUser(profile.email, profile.name);
-    setShowChooserModal(false);
-  };
-
-  // Custom Google account submission
-  const handleCustomSubmit = (e: React.FormEvent) => {
+  const handleSaveClientId = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customEmail.trim() || !customName.trim()) return;
+    const clean = tempClientId.trim();
+    if (!clean) return;
 
+    localStorage.setItem('pacoca_google_client_id', clean);
+    setGoogleClientId(clean);
+    setShowConfigModal(false);
     sound.playSuccess();
-    loginUser(customEmail.trim(), customName.trim());
-    setShowChooserModal(false);
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-amber-50/70 via-slate-50 to-amber-100/30 flex flex-col justify-between p-4 sm:p-8">
-      {/* Top Brand Bar */}
+      {/* Top Header */}
       <header className="w-full max-w-4xl mx-auto flex items-center justify-between py-2">
         <div className="flex items-center gap-2.5">
           <div className="w-10 h-10 rounded-2xl bg-amber-400 border-2 border-amber-500 border-b-4 border-b-amber-600 flex items-center justify-center shadow-sm overflow-hidden p-0.5">
@@ -139,46 +156,60 @@ export const LoginScreen: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-700 text-xs font-black">
-          <CheckCircle2 className="w-3.5 h-3.5" />
-          <span>v2.0 Online</span>
-        </div>
+        <button
+          onClick={() => {
+            sound.playClick();
+            setShowConfigModal(true);
+          }}
+          title="Configurações de Conexão Google"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-600 text-xs font-black transition-colors cursor-pointer"
+        >
+          <Settings className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Google OAuth</span>
+        </button>
       </header>
 
-      {/* Hero Core */}
+      {/* Main Login Hero */}
       <main className="w-full max-w-md mx-auto my-auto flex flex-col items-center text-center py-6">
-        {/* Paçoca Mascot with speech */}
         <Mascot
           mood="official"
           size="lg"
-          speech="Olá! Faça login com sua conta Google para salvar seu progresso e aprender inglês comigo!"
+          speech="Bem-vindo ao Paçoca English! Faça login com sua conta oficial do Google para acessar suas lições e salvar seu progresso!"
           className="mb-4"
         />
 
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-black uppercase tracking-wider mb-2 border border-amber-200">
           <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-          Aprenda Inglês Sem Frustração
+          Acesso Seguro & Individual
         </div>
 
         <h2 className="font-fredoka text-3xl sm:text-4xl text-slate-800 font-black mb-2 leading-tight">
-          Pratique com o Paçoca
+          Aprenda Inglês com o Paçoca
         </h2>
         <p className="text-slate-600 font-bold text-sm sm:text-base max-w-xs mb-6">
-          Cada usuário tem seu painel exclusivo, vidas, streak e lições por nível A1, A2 e B1.
+          A plataforma é aberta a todos os alunos. Conecte sua conta Google para iniciar do seu nível individual.
         </p>
 
-        {/* Google Sign-In Primary Card */}
-        <div className="w-full bg-white rounded-3xl p-5 border-2 border-slate-200 shadow-xl space-y-3">
-          {/* Optional Official GSI Container */}
-          <div id="googleGsiDiv" className="w-full flex justify-center empty:hidden"></div>
+        {/* Central Google Sign-In Card */}
+        <div className="w-full bg-white rounded-3xl p-6 border-2 border-slate-200 shadow-xl space-y-4">
+          {/* Error Message if any */}
+          {errorMessage && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-bold flex items-center gap-2 text-left">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
 
-          {/* Primary 3D Google Button */}
+          {/* Official Google Button rendered by Google Identity Services if Client ID exists */}
+          <div id="officialGoogleButtonDiv" className="w-full flex justify-center empty:hidden"></div>
+
+          {/* Primary 3D Google Sign-In Button */}
           <button
-            onClick={handleGoogleClick}
-            disabled={isSigningIn}
-            className="w-full py-4 px-6 bg-white hover:bg-slate-50 border-2 border-slate-200 border-b-4 border-b-slate-400 active:border-b-2 active:translate-y-0.5 rounded-2xl font-black text-slate-700 text-base sm:text-lg flex items-center justify-center gap-3 shadow-md transition-all cursor-pointer group"
+            onClick={handleGoogleSignIn}
+            disabled={isLoading}
+            className="w-full py-4 px-6 bg-white hover:bg-slate-50 border-2 border-slate-300 border-b-4 border-b-slate-400 active:border-b-2 active:translate-y-0.5 rounded-2xl font-black text-slate-700 text-base sm:text-lg flex items-center justify-center gap-3 shadow-md hover:border-slate-400 transition-all cursor-pointer group"
           >
-            {/* Crisp SVG Google G */}
+            {/* Authentic Google Multi-Color G Logo */}
             <svg className="w-6 h-6 shrink-0 transition-transform group-hover:scale-110" viewBox="0 0 24 24">
               <path
                 fill="#4285F4"
@@ -197,42 +228,16 @@ export const LoginScreen: React.FC = () => {
                 d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
               />
             </svg>
-            <span>{isSigningIn ? 'Conectando...' : 'Entrar com a Conta Google'}</span>
+            <span>{isLoading ? 'Conectando ao Google...' : 'Continuar com o Google'}</span>
           </button>
 
-          {/* Quick 1-click accounts row */}
-          <div className="pt-2">
-            <span className="text-[11px] font-black uppercase text-slate-400 tracking-wider block mb-2">
-              Ou selecione sua conta rápida:
-            </span>
-            <div className="grid grid-cols-2 gap-2">
-              {QUICK_ACCOUNTS.map((acc) => (
-                <button
-                  key={acc.email}
-                  onClick={() => handleSelectQuickAccount(acc)}
-                  className="p-2.5 rounded-xl border border-slate-200 hover:border-amber-400 hover:bg-amber-50/50 flex items-center gap-2 text-left transition-all cursor-pointer group"
-                >
-                  <div
-                    className={`w-7 h-7 rounded-full ${acc.avatarBg} text-white font-black text-xs flex items-center justify-center shrink-0 shadow-xs`}
-                  >
-                    {acc.initial}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="font-fredoka text-xs font-black text-slate-800 truncate group-hover:text-amber-700">
-                      {acc.name}
-                    </p>
-                    <p className="text-[10px] text-slate-400 font-bold truncate">
-                      {acc.badge}
-                    </p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
+          <p className="text-[11px] text-slate-400 font-semibold leading-relaxed">
+            Ao continuar, você entrará diretamente com sua conta Google oficial. Suas vidas, lições e conquistas ficam salvos de forma permanente.
+          </p>
         </div>
 
-        {/* Feature Highlights (Original 3D Badges, Zero Emojis) */}
-        <div className="w-full grid grid-cols-3 gap-2 mt-6">
+        {/* Feature Badges Grid (Zero Emojis) */}
+        <div className="w-full grid grid-cols-3 gap-2.5 mt-6">
           <div className="bg-white/80 rounded-2xl p-3 border border-slate-200/80 flex flex-col items-center text-center shadow-xs">
             <div className="w-9 h-9 rounded-xl bg-sky-100 text-sky-600 flex items-center justify-center mb-1">
               <svg className="w-5 h-5 fill-sky-600" viewBox="0 0 24 24">
@@ -249,7 +254,7 @@ export const LoginScreen: React.FC = () => {
               <PacocaBadge badge="level-a1" size="sm" />
             </div>
             <span className="font-fredoka text-xs font-black text-slate-700">Níveis A1 a B1</span>
-            <span className="text-[10px] text-slate-500 font-semibold leading-tight">Bloqueados em ordem</span>
+            <span className="text-[10px] text-slate-500 font-semibold leading-tight">Ordem estruturada</span>
           </div>
 
           <div className="bg-white/80 rounded-2xl p-3 border border-slate-200/80 flex flex-col items-center text-center shadow-xs">
@@ -259,7 +264,7 @@ export const LoginScreen: React.FC = () => {
               </svg>
             </div>
             <span className="font-fredoka text-xs font-black text-slate-700">Modo Casal</span>
-            <span className="text-[10px] text-slate-500 font-semibold leading-tight">Streak compartilhado</span>
+            <span className="text-[10px] text-slate-500 font-semibold leading-tight">Conexão opcional</span>
           </div>
         </div>
       </main>
@@ -267,147 +272,74 @@ export const LoginScreen: React.FC = () => {
       {/* Footer Info */}
       <footer className="w-full max-w-md mx-auto text-center py-2 text-xs font-bold text-slate-400 flex items-center justify-center gap-2">
         <ShieldCheck className="w-4 h-4 text-emerald-500" />
-        <span>Seus dados são salvos com segurança na sua conta Google</span>
+        <span>Autenticação direta pelos servidores oficiais da Google</span>
       </footer>
 
-      {/* Google Account Selector Dialog (Realistic Google Dialog) */}
-      {showChooserModal && (
+      {/* Configuration Modal (for entering Google Client ID or Supabase OAuth setup) */}
+      {showConfigModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/75 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-sm w-full shadow-2xl border-2 border-slate-200 overflow-hidden animate-in fade-in zoom-in duration-150">
-            {/* Google Dialog Header */}
-            <div className="p-6 text-center border-b border-slate-100 relative">
-              <button
-                onClick={() => setShowChooserModal(false)}
-                className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 rounded-full cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-
-              <svg className="w-10 h-10 mx-auto mb-2" viewBox="0 0 24 24">
-                <path
-                  fill="#4285F4"
-                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                />
-                <path
-                  fill="#EA4335"
-                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                />
-              </svg>
-
-              <h3 className="font-fredoka text-xl text-slate-800 font-black">
-                Fazer login com o Google
-              </h3>
-              <p className="text-slate-500 text-xs font-semibold mt-1">
-                Escolha uma conta para ir para <span className="font-bold text-amber-600">Paçoca English</span>
-              </p>
+          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border-2 border-slate-200 p-6 text-left animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center">
+                <Key className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-fredoka text-xl text-slate-800 font-black">
+                  Conexão Oficial Google
+                </h3>
+                <p className="text-slate-500 text-xs font-semibold">
+                  Google Cloud Console ou Supabase Auth
+                </p>
+              </div>
             </div>
 
-            {/* Account List */}
-            <div className="p-4 space-y-2">
-              {QUICK_ACCOUNTS.map((acc) => (
+            <p className="text-xs text-slate-600 font-semibold leading-relaxed mb-4">
+              Para autenticar centenas de usuários com a conta oficial do Google (@gmail.com), a plataforma utiliza o <span className="font-bold text-slate-800">Google OAuth 2.0</span> ou o <span className="font-bold text-slate-800">Supabase</span>.
+            </p>
+
+            <form onSubmit={handleSaveClientId} className="space-y-4">
+              <div>
+                <label className="text-[11px] font-black uppercase text-slate-500 block mb-1">
+                  Google Client ID (Google Cloud):
+                </label>
+                <input
+                  type="text"
+                  placeholder="ex: 123456789-xxxxxx.apps.googleusercontent.com"
+                  value={tempClientId || googleClientId}
+                  onChange={(e) => setTempClientId(e.target.value)}
+                  className="w-full px-3 py-2.5 bg-slate-50 border-2 border-slate-200 rounded-xl text-xs font-bold focus:outline-hidden focus:border-amber-500"
+                />
+                <span className="text-[10px] text-slate-400 font-semibold mt-1 block">
+                  Criado gratuitamente no <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer" className="text-sky-600 underline">Google Cloud Console</a>.
+                </span>
+              </div>
+
+              <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-amber-900 text-xs font-medium space-y-1">
+                <div className="flex items-center gap-1.5 font-bold text-amber-800">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>Ambiente de Produção com Supabase:</span>
+                </div>
+                <p className="text-[11px] text-amber-800/90 leading-tight">
+                  Se você utiliza o Supabase, basta definir <code className="bg-amber-100 px-1 rounded text-[10px]">VITE_SUPABASE_URL</code> e <code className="bg-amber-100 px-1 rounded text-[10px]">VITE_SUPABASE_ANON_KEY</code> no arquivo <code className="bg-amber-100 px-1 rounded text-[10px]">.env</code> para habilitar o Google Provider.
+                </p>
+              </div>
+
+              <div className="pt-2 flex gap-2">
                 <button
-                  key={acc.email}
-                  onClick={() => handleSelectQuickAccount(acc)}
-                  className="w-full p-3 rounded-2xl border border-slate-200 hover:border-amber-400 hover:bg-amber-50/60 flex items-center justify-between transition-all cursor-pointer text-left group"
+                  type="submit"
+                  className="flex-1 py-3 btn-3d-green rounded-xl font-black text-xs cursor-pointer"
                 >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`w-10 h-10 rounded-full ${acc.avatarBg} text-white font-black text-sm flex items-center justify-center shadow-xs`}
-                    >
-                      {acc.initial}
-                    </div>
-                    <div>
-                      <p className="font-fredoka text-sm font-black text-slate-800 group-hover:text-amber-700">
-                        {acc.name}
-                      </p>
-                      <p className="text-xs text-slate-500 font-semibold">{acc.email}</p>
-                    </div>
-                  </div>
-                  <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-amber-500 group-hover:translate-x-0.5 transition-all" />
+                  Salvar e Ativar Google Sign-In
                 </button>
-              ))}
-
-              {/* Usar outra conta */}
-              {!isCustomMode ? (
                 <button
-                  onClick={() => {
-                    sound.playClick();
-                    setIsCustomMode(true);
-                  }}
-                  className="w-full p-3 rounded-2xl border border-dashed border-slate-300 hover:border-slate-400 hover:bg-slate-50 flex items-center gap-3 text-left transition-all cursor-pointer text-slate-600 font-black text-xs"
+                  type="button"
+                  onClick={() => setShowConfigModal(false)}
+                  className="px-4 py-3 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold text-slate-600 text-xs cursor-pointer"
                 >
-                  <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 text-slate-500 flex items-center justify-center">
-                    <User className="w-5 h-5" />
-                  </div>
-                  <span>Usar outra conta Google</span>
+                  Fechar
                 </button>
-              ) : (
-                <form onSubmit={handleCustomSubmit} className="pt-2 space-y-3 border-t border-slate-100">
-                  <div>
-                    <label className="text-[11px] font-black uppercase text-slate-500 block mb-1">
-                      E-mail da Conta Google:
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="email"
-                        required
-                        placeholder="exemplo@gmail.com"
-                        value={customEmail}
-                        onChange={(e) => setCustomEmail(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 bg-slate-50 border-2 border-slate-200 rounded-xl text-xs font-bold focus:outline-hidden focus:border-amber-500"
-                      />
-                      <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] font-black uppercase text-slate-500 block mb-1">
-                      Seu Nome:
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        required
-                        placeholder="Seu nome"
-                        value={customName}
-                        onChange={(e) => setCustomName(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 bg-slate-50 border-2 border-slate-200 rounded-xl text-xs font-bold focus:outline-hidden focus:border-amber-500"
-                      />
-                      <User className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                    </div>
-                  </div>
-
-                  <div className="pt-1 flex gap-2">
-                    <button
-                      type="submit"
-                      className="flex-1 py-2.5 btn-3d-green rounded-xl font-black text-xs cursor-pointer"
-                    >
-                      Acessar Conta
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setIsCustomMode(false)}
-                      className="px-3 py-2.5 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold text-slate-600 text-xs cursor-pointer"
-                    >
-                      Voltar
-                    </button>
-                  </div>
-                </form>
-              )}
-            </div>
-
-            {/* Privacy footer */}
-            <div className="bg-slate-50 p-4 border-t border-slate-100 text-[11px] text-slate-400 text-center font-medium leading-relaxed">
-              Para continuar, o Google compartilhará seu nome, e-mail e foto do perfil com Paçoca English.
-            </div>
+              </div>
+            </form>
           </div>
         </div>
       )}
