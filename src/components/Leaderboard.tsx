@@ -1,10 +1,21 @@
-import React from 'react';
-import { Trophy, Sparkles, UserPlus, Flame } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Trophy, Sparkles, UserPlus, Flame, RotateCw } from 'lucide-react';
 import { useUser } from '../context/UserContext';
 import { Mascot } from './Mascot';
 
 export const Leaderboard: React.FC = () => {
-  const { currentUser, allLearners } = useUser();
+  const { currentUser, allLearners, refreshLeaderboard } = useUser();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  useEffect(() => {
+    refreshLeaderboard();
+  }, []);
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    await refreshLeaderboard();
+    setTimeout(() => setIsRefreshing(false), 600);
+  };
 
   if (!currentUser) return null;
 
@@ -19,16 +30,32 @@ export const Leaderboard: React.FC = () => {
     <div className="max-w-2xl mx-auto space-y-6 pb-24">
       {/* Header Banner with Mascot */}
       <div className="bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 rounded-3xl p-6 sm:p-7 text-white shadow-xl flex items-center justify-between gap-4 border-b-6 border-b-amber-700">
-        <div className="space-y-1">
-          <span className="text-xs font-black uppercase tracking-wider text-amber-100 flex items-center gap-1">
-            <Sparkles className="w-4 h-4 fill-amber-300 text-amber-300" /> Placar da Liga Paçoca
-          </span>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-black uppercase tracking-wider text-amber-100 flex items-center gap-1">
+              <Sparkles className="w-4 h-4 fill-amber-300 text-amber-300" /> Placar da Liga Paçoca
+            </span>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-950/30 text-emerald-200 text-[11px] font-black border border-emerald-400/40 backdrop-blur-xs">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              Tempo Real
+            </span>
+          </div>
+
           <h2 className="font-fredoka text-2xl sm:text-3xl font-black">
             Ranking em Tempo Real
           </h2>
           <p className="text-amber-100 text-xs sm:text-sm font-medium">
-            Pontuação real de quem está aprendendo inglês de verdade no app!
+            Pontuação sincronizada em tempo real com todos os alunos conectados!
           </p>
+
+          <button
+            onClick={handleManualRefresh}
+            disabled={isRefreshing}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-black transition-all active:scale-95 disabled:opacity-50 cursor-pointer shadow-xs"
+          >
+            <RotateCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+            {isRefreshing ? 'Atualizando...' : 'Atualizar Ranking'}
+          </button>
         </div>
         <div className="shrink-0">
           <Mascot mood="proud" size="sm" interactive={true} />

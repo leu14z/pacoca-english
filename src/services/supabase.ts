@@ -52,22 +52,66 @@ export async function syncUserProfile(profile: AuthUserProfile) {
       : crypto.randomUUID();
 
   try {
-    const { error } = await supabase.from('profiles').upsert({
-      id: validId,
-      full_name: profile.name,
-      email: profile.email,
-      avatar_url: profile.avatar,
-      level: profile.level || 'A1',
-      total_xp: profile.xp,
-      hearts: profile.hearts,
-      streak_count: profile.streak,
-      last_activity_date: profile.lastActiveDate,
-      placement_completed: profile.placementCompleted || false,
-    });
+    const { error } = await supabase.from('profiles').upsert(
+      {
+        id: validId,
+        full_name: profile.name,
+        email: profile.email.toLowerCase().trim(),
+        avatar_url: profile.avatar,
+        level: profile.level || 'A1',
+        total_xp: profile.xp ?? 0,
+        hearts: profile.hearts ?? 5,
+        streak_count: profile.streak ?? 0,
+        last_activity_date: profile.lastActiveDate,
+        placement_completed: profile.placementCompleted || false,
+      },
+      { onConflict: 'email' }
+    );
 
-    if (error) console.warn('Supabase sync profile error:', error.message);
+    if (error) {
+      console.warn('Supabase sync profile warning:', error.message);
+    } else {
+      console.log('Profile successfully synced to Supabase:', profile.email, 'XP:', profile.xp);
+    }
   } catch (err) {
     console.warn('Supabase sync profile exception:', err);
+  }
+}
+
+/**
+ * Fetch profile by email from Supabase
+ */
+export async function fetchUserProfileByEmail(email: string): Promise<AuthUserProfile | null> {
+  if (!supabase) return null;
+
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('email', email.toLowerCase().trim())
+      .maybeSingle();
+
+    if (error || !data) return null;
+
+    return {
+      id: data.id,
+      name: data.full_name || 'Aluno',
+      email: data.email,
+      avatar: data.avatar_url || './mascot/mascoteoficial.png',
+      xp: data.total_xp ?? 0,
+      hearts: data.hearts ?? 5,
+      maxHearts: 5,
+      diamonds: 100,
+      streak: data.streak_count ?? 0,
+      lastActiveDate: data.last_activity_date || '',
+      completedLessons: [],
+      completedToday: false,
+      level: data.level || 'A1',
+      placementCompleted: data.placement_completed || false,
+    };
+  } catch (err) {
+    console.warn('Supabase fetch profile error:', err);
+    return null;
   }
 }
 
@@ -106,22 +150,24 @@ export async function fetchRealtimeLeaderboard(): Promise<AuthUserProfile[]> {
 
     if (error || !data) return [];
 
-    return data.map((row: any) => ({
-      id: row.id,
-      name: row.full_name,
-      email: row.email,
-      avatar: row.avatar_url || 'https://api.dicebear.com/7.x/bottts/svg?seed=' + row.full_name,
-      xp: row.total_xp,
-      hearts: row.hearts,
-      maxHearts: 5,
-      diamonds: 100,
-      streak: row.streak_count,
-      lastActiveDate: row.last_activity_date || '',
-      completedLessons: [],
-      completedToday: false,
-      level: row.level,
-      placementCompleted: row.placement_completed,
-    }));
+    return data
+      .filter((row: any) => row.email && row.full_name)
+      .map((row: any) => ({
+        id: row.id,
+        name: row.full_name,
+        email: row.email,
+        avatar: row.avatar_url || './mascot/mascoteoficial.png',
+        xp: row.total_xp ?? 0,
+        hearts: row.hearts ?? 5,
+        maxHearts: 5,
+        diamonds: 100,
+        streak: row.streak_count ?? 0,
+        lastActiveDate: row.last_activity_date || '',
+        completedLessons: [],
+        completedToday: false,
+        level: row.level || 'A1',
+        placementCompleted: row.placement_completed || false,
+      }));
   } catch (err) {
     console.warn('Supabase leaderboard fetch error:', err);
     return [];

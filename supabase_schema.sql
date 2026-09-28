@@ -55,15 +55,37 @@ ALTER TABLE public.user_progress ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.modules ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.missions ENABLE ROW LEVEL SECURITY;
 
--- 6. RLS Policies
-CREATE POLICY "Users can manage their own profile"
+-- 6. Remove restrictive foreign key constraints for client-side generated UUIDs
+ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_id_fkey;
+ALTER TABLE public.user_progress DROP CONSTRAINT IF EXISTS user_progress_user_id_fkey;
+
+-- 7. RLS Policies
+DROP POLICY IF EXISTS "Users can manage their own profile" ON public.profiles;
+DROP POLICY IF EXISTS "Allow authenticated read of profiles for leaderboard" ON public.profiles;
+DROP POLICY IF EXISTS "Allow public read of profiles for leaderboard" ON public.profiles;
+DROP POLICY IF EXISTS "Allow public insert and update on profiles" ON public.profiles;
+
+-- Allow anyone to read profiles for the real-time leaderboard
+CREATE POLICY "Allow public read of profiles for leaderboard"
+  ON public.profiles FOR SELECT
+  USING (true);
+
+-- Allow students to insert and update their profile progress
+CREATE POLICY "Allow public insert and update on profiles"
   ON public.profiles FOR ALL
-  USING (auth.uid() = id);
+  USING (true)
+  WITH CHECK (true);
 
-CREATE POLICY "Users can manage their own progress"
+-- User Progress policies
+DROP POLICY IF EXISTS "Users can manage their own progress" ON public.user_progress;
+DROP POLICY IF EXISTS "Allow public manage user_progress" ON public.user_progress;
+
+CREATE POLICY "Allow public manage user_progress"
   ON public.user_progress FOR ALL
-  USING (auth.uid() = user_id);
+  USING (true)
+  WITH CHECK (true);
 
+-- Modules & Missions public read
 CREATE POLICY "Allow public read access to modules"
   ON public.modules FOR SELECT
   USING (true);
@@ -72,7 +94,5 @@ CREATE POLICY "Allow public read access to missions"
   ON public.missions FOR SELECT
   USING (true);
 
--- 7. Public Read of Profiles for Realtime Leaderboard
-CREATE POLICY "Allow authenticated read of profiles for leaderboard"
-  ON public.profiles FOR SELECT
-  USING (true);
+-- 8. Enable Supabase Realtime for live Leaderboard broadcasting
+ALTER PUBLICATION supabase_realtime ADD TABLE public.profiles;

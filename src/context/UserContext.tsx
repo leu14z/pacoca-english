@@ -1,7 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { AuthUserProfile } from '../services/auth';
 import { getRegisteredUsers, saveRegisteredUser } from '../services/auth';
-import { supabase, syncUserProfile, signOutSupabase } from '../services/supabase';
+import {
+  supabase,
+  syncUserProfile,
+  signOutSupabase,
+  fetchRealtimeLeaderboard,
+  fetchUserProfileByEmail,
+} from '../services/supabase';
 
 export interface CoupleStats {
   sharedStreak: number;
@@ -28,6 +34,7 @@ interface UserContextType {
   clearNudge: () => void;
   updateUserName: (newName: string) => void;
   setPlacementLevel: (level: 'A1' | 'A2' | 'B1') => void;
+  refreshLeaderboard: () => Promise<void>;
   resetAllData: () => void;
 }
 
@@ -71,17 +78,100 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { sharedStreak: 0 };
   });
 
+  // Refresh leaderboard from Supabase real database
+  const refreshLeaderboard = async () => {
+    if (!supabase) return;
+    try {
+      const remoteUsers = await fetchRealtimeLeaderboard();
+      if (remoteUsers && remoteUsers.length > 0) {
+        setAllLearners((_prev) => {
+          // Merge remote users with current local user if local user has higher/newer XP
+          const currentEmail = currentUser?.email.toLowerCase();
+          const currentId = currentUser?.id;
+
+          const updated = remoteUsers.map((remote) => {
+            if (currentUser && (remote.id === currentId || remote.email.toLowerCase() === currentEmail)) {
+              return {
+                ...remote,
+                ...currentUser,
+                xp: Math.max(remote.xp, currentUser.xp),
+              };
+            }
+            return remote;
+          });
+
+          // If currentUser is not in remoteUsers list yet, include them
+          if (currentUser && !updated.some((u) => u.id === currentId || u.email.toLowerCase() === currentEmail)) {
+            updated.push(currentUser);
+          }
+
+          return updated;
+        });
+      }
+    } catch (err) {
+      console.warn('Erro ao atualizar ranking em tempo real:', err);
+    }
+  };
+
   // Sync currentUser to localStorage and to global registry
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem('pacoca_current_user_v3', JSON.stringify(currentUser));
       saveRegisteredUser(currentUser);
-      setAllLearners(getRegisteredUsers());
+      setAllLearners((prev) => {
+        const copy = [...prev];
+        const idx = copy.findIndex(
+          (u) =>
+            u.id === currentUser.id ||
+            u.email.toLowerCase() === currentUser.email.toLowerCase()
+        );
+        if (idx >= 0) {
+          copy[idx] = { ...copy[idx], ...currentUser };
+          return copy;
+        } else {
+          return [currentUser, ...copy];
+        }
+      });
       syncUserProfile(currentUser);
     } else {
       localStorage.removeItem('pacoca_current_user_v3');
     }
   }, [currentUser]);
+
+  // Live Supabase Realtime subscription for ranking updates
+  useEffect(() => {
+    refreshLeaderboard();
+    if (!supabase) return;
+
+    const currentSupabase = supabase;
+    const channel = currentSupabase
+      .channel('public:profiles:realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'profiles',
+        },
+        (payload) => {
+          console.log('[Realtime] Mudança nos perfis detectada:', payload);
+          refreshLeaderboard();
+        }
+      )
+      .subscribe((status) => {
+        console.log('[Realtime] Status da conexão de ranking:', status);
+      });
+
+    // Polling de segurança a cada 15 segundos caso a conexão do celular oscile
+    const interval = setInterval(() => {
+      refreshLeaderboard();
+    }, 15000);
+
+    return () => {
+      currentSupabase.removeChannel(channel);
+      clearInterval(interval);
+    };
+  }, [currentUser?.id]);
 
   // Sync couple stats to localStorage
   useEffect(() => {
@@ -100,12 +190,27 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   }, [currentUser, allLearners]);
 
-  // Login or Register a user with complete fresh zero stats
-  const loginUser = (email: string, name: string, avatar?: string, id?: string) => {
+  // Login or Register a user (preserves stats across devices if found in Supabase)
+  const loginUser = async (email: string, name: string, avatar?: string, id?: string) => {
     const cleanEmail = email.trim().toLowerCase();
     const cleanName = name.trim() || cleanEmail.split('@')[0];
     const registered = getRegisteredUsers();
-    const existing = registered.find((u) => u.email.toLowerCase() === cleanEmail);
+    let existing = registered.find((u) => u.email.toLowerCase() === cleanEmail);
+
+    // If not found in localStorage, fetch from Supabase to preserve cross-device stats
+    if (!existing && supabase) {
+      try {
+        const remoteProfile = await fetchUserProfileByEmail(cleanEmail);
+        if (remoteProfile) {
+          existing = {
+            ...remoteProfile,
+            coupleCode: `PACOCA-${Math.floor(1000 + Math.random() * 9000)}`,
+          };
+        }
+      } catch (err) {
+        console.warn('Erro ao restaurar perfil do Supabase:', err);
+      }
+    }
 
     // Ensure valid UUID for Postgres profiles table
     const safeId =
@@ -141,8 +246,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
       saveRegisteredUser(newUser);
       setCurrentUser(newUser);
-      setAllLearners(getRegisteredUsers());
     }
+
+    refreshLeaderboard();
   };
 
   // Listen for live Supabase Google OAuth session
@@ -322,6 +428,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         clearNudge,
         updateUserName,
         setPlacementLevel,
+        refreshLeaderboard,
         resetAllData,
       }}
     >
