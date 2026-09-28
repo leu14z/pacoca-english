@@ -162,11 +162,11 @@ export const LoginScreen: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#FFFDF9] flex flex-col justify-between items-center p-6 select-none">
+    <div className="min-h-[100dvh] bg-[#FFFDF9] flex flex-col justify-between items-center px-4 py-4 sm:py-6 select-none">
       {/* Brand Header */}
-      <header className="w-full max-w-md flex items-center justify-between pt-4">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-2xl bg-amber-400 border-2 border-amber-500 border-b-4 border-b-amber-600 flex items-center justify-center shadow-xs overflow-hidden p-0.5">
+      <header className="w-full max-w-md flex items-center justify-between pt-1 sm:pt-2">
+        <div className="flex items-center gap-2.5 sm:gap-3">
+          <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-2xl bg-amber-400 border-2 border-amber-500 border-b-4 border-b-amber-600 flex items-center justify-center shadow-xs overflow-hidden p-0.5 shrink-0">
             <img
               src="./mascot/mascoteoficial.png"
               alt="Paçoca"
@@ -174,10 +174,10 @@ export const LoginScreen: React.FC = () => {
             />
           </div>
           <div>
-            <h1 className="font-fredoka text-2xl font-black text-amber-700 tracking-tight leading-none">
+            <h1 className="font-fredoka text-xl sm:text-2xl font-black text-amber-700 tracking-tight leading-none">
               PAÇOCA ENGLISH
             </h1>
-            <span className="text-[11px] font-black uppercase text-amber-500 tracking-wider">
+            <span className="text-[10px] sm:text-[11px] font-black uppercase text-amber-500 tracking-wider">
               Aprenda Inglês Falando
             </span>
           </div>
@@ -185,10 +185,10 @@ export const LoginScreen: React.FC = () => {
       </header>
 
       {/* Main Focus Area */}
-      <main className="w-full max-w-sm flex flex-col items-center text-center my-auto py-8">
-        {/* Mascot Centerpiece */}
-        <div className="relative mb-6">
-          <div className="w-36 h-36 sm:w-44 sm:h-44 rounded-full bg-gradient-to-b from-amber-100/90 to-amber-200/50 flex items-center justify-center p-3 border-4 border-white shadow-xl">
+      <main className="w-full max-w-sm flex flex-col items-center text-center my-auto py-4 sm:py-6">
+        {/* Mascot Centerpiece - responsive sizing */}
+        <div className="relative mb-4 sm:mb-6">
+          <div className="w-28 h-28 sm:w-40 sm:h-40 rounded-full bg-gradient-to-b from-amber-100/90 to-amber-200/50 flex items-center justify-center p-2.5 sm:p-3 border-4 border-white shadow-lg">
             <img
               src="./mascot/mascoteoficial.png"
               alt="Paçoca Mascote"
@@ -198,10 +198,10 @@ export const LoginScreen: React.FC = () => {
         </div>
 
         {/* Title and Tagline */}
-        <h2 className="font-fredoka text-3xl sm:text-4xl text-slate-800 font-black mb-3 leading-tight tracking-tight">
+        <h2 className="font-fredoka text-2xl sm:text-4xl text-slate-800 font-black mb-2 sm:mb-3 leading-tight tracking-tight">
           Aprenda Inglês de Verdade
         </h2>
-        <p className="text-slate-500 font-bold text-sm sm:text-base leading-relaxed max-w-xs mb-8">
+        <p className="text-slate-500 font-bold text-xs sm:text-base leading-relaxed max-w-xs mb-5 sm:mb-8">
           Pratique fala e pronúncia desde o nível iniciante com o Paçoca. Sem enrolação.
         </p>
 
@@ -216,10 +216,10 @@ export const LoginScreen: React.FC = () => {
           <button
             onClick={handleGoogleSignIn}
             disabled={isLoading}
-            className="w-full py-4 px-6 bg-white hover:bg-slate-50 border-2 border-slate-300 border-b-4 border-b-slate-400 active:border-b-2 active:translate-y-0.5 rounded-2xl font-black text-slate-700 text-base sm:text-lg flex items-center justify-center gap-3.5 shadow-md hover:border-slate-400 transition-all cursor-pointer group disabled:opacity-60"
+            className="w-full py-3.5 sm:py-4 px-4 sm:px-6 bg-white hover:bg-slate-50 border-2 border-slate-300 border-b-4 border-b-slate-400 active:border-b-2 active:translate-y-0.5 rounded-2xl font-black text-slate-700 text-sm sm:text-base flex items-center justify-center gap-3 shadow-md hover:border-slate-400 transition-all cursor-pointer group disabled:opacity-60"
           >
             {/* Crisp Authentic Google G Logo */}
-            <svg className="w-6 h-6 shrink-0 transition-transform group-hover:scale-110" viewBox="0 0 24 24">
+            <svg className="w-5 h-5 sm:w-6 sm:h-6 shrink-0 transition-transform group-hover:scale-110" viewBox="0 0 24 24">
               <path
                 fill="#4285F4"
                 d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -243,7 +243,7 @@ export const LoginScreen: React.FC = () => {
       </main>
 
       {/* Clean Footer */}
-      <footer className="w-full max-w-sm text-center pb-4 text-xs font-bold text-slate-400">
+      <footer className="w-full max-w-sm text-center pb-2 sm:pb-3 text-[11px] sm:text-xs font-bold text-slate-400">
         Cada aluno possui seu próprio painel, vidas e histórico salvos.
       </footer>
     </div>

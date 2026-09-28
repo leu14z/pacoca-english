@@ -612,7 +612,7 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
 
       {/* Bottom Action Footer Sheet with Immediate Retry Option */}
       <div
-        className={`w-full border-t-2 p-4 sm:p-6 transition-all ${
+        className={`w-full border-t-2 p-3.5 sm:p-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] transition-all ${
           status === 'correct'
             ? 'bg-emerald-100 border-emerald-300 text-emerald-900'
             : status === 'incorrect'
@@ -620,13 +620,13 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
             : 'bg-white border-slate-200'
         }`}
       >
-        <div className="max-w-2xl mx-auto flex items-center justify-between gap-4">
+        <div className="max-w-2xl mx-auto flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4">
           <div className="flex-1">
             {status === 'correct' && (
-              <div className="flex items-center gap-3">
-                <CheckCircle2 className="w-8 h-8 text-emerald-600 shrink-0" />
+              <div className="flex items-center gap-2.5 sm:gap-3">
+                <CheckCircle2 className="w-7 h-7 sm:w-8 sm:h-8 text-emerald-600 shrink-0" />
                 <div>
-                  <h4 className="font-fredoka text-xl text-emerald-800 font-black">
+                  <h4 className="font-fredoka text-lg sm:text-xl text-emerald-800 font-black">
                     Sensacional!
                   </h4>
                   <p className="text-xs sm:text-sm font-bold text-emerald-700">
@@ -637,10 +637,10 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
             )}
 
             {status === 'incorrect' && (
-              <div className="flex items-center gap-3">
-                <XCircle className="w-8 h-8 text-rose-600 shrink-0" />
+              <div className="flex items-center gap-2.5 sm:gap-3">
+                <XCircle className="w-7 h-7 sm:w-8 sm:h-8 text-rose-600 shrink-0" />
                 <div>
-                  <h4 className="font-fredoka text-xl text-rose-800 font-black">
+                  <h4 className="font-fredoka text-lg sm:text-xl text-rose-800 font-black">
                     Ops, quase lá!
                   </h4>
                   <p className="text-xs sm:text-sm font-bold text-rose-700">
@@ -651,7 +651,7 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
                         : currentExercise.correctAnswer}
                     </span>
                   </p>
-                  <p className="text-[11px] font-bold text-rose-600 mt-0.5">
+                  <p className="text-[10px] sm:text-[11px] font-bold text-rose-600 mt-0.5">
                     Você pode refazer agora ou continuar!
                   </p>
                 </div>
@@ -661,18 +661,18 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
 
           {/* Action Buttons: If incorrect, offers "Tentar Novamente" AND "Continuar" */}
           {status === 'incorrect' ? (
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
               <button
                 onClick={handleRetryNow}
-                className="py-3 px-5 bg-white hover:bg-slate-50 border-2 border-slate-300 border-b-4 border-b-slate-400 rounded-2xl font-black text-slate-800 text-xs sm:text-sm flex items-center gap-2 cursor-pointer shadow-xs active:border-b-2 active:translate-y-0.5 transition-all"
+                className="flex-1 sm:flex-none py-3 px-4 sm:px-5 bg-white hover:bg-slate-50 border-2 border-slate-300 border-b-4 border-b-slate-400 rounded-2xl font-black text-slate-800 text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer shadow-xs active:border-b-2 active:translate-y-0.5 transition-all"
               >
                 <RotateCcw className="w-4 h-4 text-amber-600" />
-                <span>Tentar Novamente</span>
+                <span>Tentar De Novo</span>
               </button>
 
               <button
                 onClick={handleNext}
-                className="py-3 px-6 btn-3d-red rounded-2xl font-black text-xs sm:text-sm uppercase tracking-wider cursor-pointer transition-all"
+                className="flex-1 sm:flex-none py-3 px-5 sm:px-6 btn-3d-red rounded-2xl font-black text-xs sm:text-sm uppercase tracking-wider cursor-pointer transition-all"
               >
                 Continuar
               </button>
@@ -680,7 +680,7 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
           ) : (
             <button
               onClick={handleVerify}
-              className={`py-3.5 px-8 rounded-2xl font-black text-base uppercase tracking-wider cursor-pointer transition-all ${
+              className={`w-full sm:w-auto py-3 sm:py-3.5 px-8 rounded-2xl font-black text-sm sm:text-base uppercase tracking-wider cursor-pointer transition-all ${
                 status === 'correct' ? 'btn-3d-green' : 'btn-3d-green'
               }`}
             >

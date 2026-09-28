@@ -25,11 +25,11 @@ export const Header: React.FC = () => {
 
   return (
     <>
-      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b-2 border-slate-200 px-4 py-2.5 transition-all">
-        <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
+      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b-2 border-slate-200 px-3 sm:px-4 py-2 sm:py-2.5 transition-all">
+        <div className="max-w-4xl mx-auto flex items-center justify-between gap-1.5 sm:gap-3">
           {/* Course Badge with Crisp SVG Flag (Duolingo Style - No broken Windows emoji) */}
           <div
-            className="flex items-center gap-2.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200/80 rounded-2xl border-2 border-slate-200/90 transition-colors cursor-pointer select-none"
+            className="flex items-center gap-1.5 sm:gap-2.5 px-2 sm:px-3 py-1 sm:py-1.5 bg-slate-100 hover:bg-slate-200/80 rounded-2xl border-2 border-slate-200/90 transition-colors cursor-pointer select-none shrink-0"
             title="Curso de Inglês"
           >
             {/* High-res SVG American Flag */}

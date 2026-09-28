@@ -41,7 +41,7 @@ const MainApp: React.FC = () => {
       <div className="flex-1 flex flex-col min-w-0">
         <Header />
 
-        <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-6">
+        <main className="flex-1 max-w-4xl w-full mx-auto px-3 sm:px-6 pt-3 sm:pt-6 pb-28 md:pb-8">
           <Suspense fallback={<LoadingSpinner />}>
             {currentTab === 'learn' && (
               <LearnPath
