@@ -1,4 +1,4 @@
-# 🐾 Paçoca English (Paçoca Lingo)
+# 🐾 Paçoca English 
 
 Uma plataforma interativa, acelerada e gamificada de aprendizado de inglês inspirada no Duolingo, estrelando o mascote **Paçoca** e suas 9 variantes de humor!
 
