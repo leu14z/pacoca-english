@@ -418,8 +418,8 @@ export const COURSE_UNITS: Unit[] = [
   // ==========================================
   {
     id: 'unit-4',
-    moduleTitle: 'MÓDULO 3: CONVERSAÇÃO REAL & FLUÊNCIA',
-    title: 'Unidade 4: Viagens, Aeroporto & Situações Reais',
+    moduleTitle: 'MÓDULO 3: VIAGENS & SITUAÇÕES REAIS (A2)',
+    title: 'Unidade 4: Viagens, Aeroporto & Imigração',
     subtitle: 'Passaporte, imigração e desembarque como um viajante experiente.',
     color: 'amber',
     lessons: [
@@ -463,4 +463,193 @@ export const COURSE_UNITS: Unit[] = [
       },
     ],
   },
+
+  // ==========================================
+  // MÓDULO 4: HOTEL & CIDADE (A2)
+  // ==========================================
+  {
+    id: 'unit-5',
+    moduleTitle: 'MÓDULO 4: HOTEL & CIDADE (A2)',
+    title: 'Unidade 5: Hotel & Hospedagem',
+    subtitle: 'Faça check-in, peça a senha do Wi-Fi e tire dúvidas na recepção!',
+    color: 'sky',
+    lessons: [
+      {
+        id: 'lesson-5-1',
+        title: 'Fazendo o Check-in no Hotel',
+        description: 'Diga que você tem uma reserva e peça a chave do quarto.',
+        xpReward: 25,
+        exercises: [
+          {
+            id: 'u5-e1',
+            type: 'multiple-choice',
+            prompt: 'Como dizer "Eu tenho uma reserva" em inglês?',
+            options: ['I have a reservation', 'Where is my car?', 'Can I leave?'],
+            correctAnswer: 'I have a reservation',
+            audioText: 'I have a reservation',
+            tip: '"I have a reservation" é a frase exata para se apresentar na recepção!',
+          },
+          {
+            id: 'u5-e2',
+            type: 'word-bank',
+            prompt: 'Traduza: "Qual é a senha do Wi-Fi?"',
+            portuguesePhrase: 'Qual é a senha do Wi-Fi?',
+            options: ['What', 'is', 'the', 'Wi-Fi', 'password?', 'room', 'key', 'breakfast'],
+            correctAnswer: ['What', 'is', 'the', 'Wi-Fi', 'password?'],
+            audioText: 'What is the Wi-Fi password?',
+          },
+          {
+            id: 'u5-e3',
+            type: 'match-pairs',
+            prompt: 'Combine os termos do hotel:',
+            pairItems: [
+              { en: 'Room key', pt: 'Chave do quarto' },
+              { en: 'Breakfast included', pt: 'Café da manhã incluso' },
+              { en: 'Elevator', pt: 'Elevador' },
+              { en: 'Check-out time', pt: 'Horário de saída' },
+            ],
+            correctAnswer: '',
+          },
+          {
+            id: 'u5-e4',
+            type: 'speech',
+            prompt: 'Fale na recepção do hotel:',
+            englishPhrase: 'I have a reservation',
+            portuguesePhrase: 'Eu tenho uma reserva',
+            correctAnswer: 'I have a reservation',
+            audioText: 'I have a reservation',
+          },
+        ],
+      },
+    ],
+  },
+
+  // ==========================================
+  // MÓDULO 5: TRABALHO & CARREIRA (B1)
+  // ==========================================
+  {
+    id: 'unit-6',
+    moduleTitle: 'MÓDULO 5: TRABALHO & CARREIRA (B1)',
+    title: 'Unidade 6: Reuniões, E-mails & Negócios',
+    subtitle: 'Comunique-se em reuniões e responda e-mails profissionais com segurança.',
+    color: 'emerald',
+    lessons: [
+      {
+        id: 'lesson-6-1',
+        title: 'Agendando Reuniões & Opiniões',
+        description: 'Frases essenciais para colaborar com equipes em inglês.',
+        xpReward: 30,
+        exercises: [
+          {
+            id: 'u6-e1',
+            type: 'multiple-choice',
+            prompt: 'Como dizer "Vamos agendar uma reunião" no trabalho?',
+            options: [
+              "Let's schedule a meeting",
+              'Where is the meeting room?',
+              'I am not working today',
+            ],
+            correctAnswer: "Let's schedule a meeting",
+            audioText: "Let's schedule a meeting",
+            tip: '"Schedule" significa agendar ou marcar um compromisso!',
+          },
+          {
+            id: 'u6-e2',
+            type: 'word-bank',
+            prompt: 'Traduza: "Eu concordo com você"',
+            portuguesePhrase: 'Eu concordo com você',
+            options: ['I', 'agree', 'with', 'you', 'disagree', 'think', 'email', 'project'],
+            correctAnswer: ['I', 'agree', 'with', 'you'],
+            audioText: 'I agree with you',
+          },
+          {
+            id: 'u6-e3',
+            type: 'match-pairs',
+            prompt: 'Combine as frases do ambiente corporativo:',
+            pairItems: [
+              { en: 'Could you send me the report?', pt: 'Você poderia me enviar o relatório?' },
+              { en: 'Deadline', pt: 'Prazo de entrega' },
+              { en: 'Project manager', pt: 'Gerente de projeto' },
+              { en: 'Great job, team!', pt: 'Ótimo trabalho, equipe!' },
+            ],
+            correctAnswer: '',
+          },
+          {
+            id: 'u6-e4',
+            type: 'speech',
+            prompt: 'Expresse concordância em inglês:',
+            englishPhrase: 'I agree with you',
+            portuguesePhrase: 'Eu concordo com você',
+            correctAnswer: 'I agree with you',
+            audioText: 'I agree with you',
+          },
+        ],
+      },
+    ],
+  },
+
+  // ==========================================
+  // MÓDULO 6: EXPRESSÕES NATIVAS & FLUÊNCIA (B1)
+  // ==========================================
+  {
+    id: 'unit-7',
+    moduleTitle: 'MÓDULO 6: CONVERSAÇÃO FLUENTE & GÍRIAS (B1)',
+    title: 'Unidade 7: Expressões Nativas do Dia a Dia',
+    subtitle: 'Fale como um nativo usando idioms e gírias naturais.',
+    color: 'rose',
+    lessons: [
+      {
+        id: 'lesson-7-1',
+        title: 'Expressões Populares (No worries & Take your time)',
+        description: 'As frases mais usadas no dia a dia que não se traduzem ao pé da letra.',
+        xpReward: 30,
+        exercises: [
+          {
+            id: 'u7-e1',
+            type: 'multiple-choice',
+            prompt: 'O que um nativo quer dizer quando diz "No worries"?',
+            options: [
+              'Sem problemas! / De nada!',
+              'Estou muito preocupado',
+              'Não quero falar com você',
+            ],
+            correctAnswer: 'Sem problemas! / De nada!',
+            audioText: 'No worries',
+            tip: '"No worries" é super comum nos EUA, Austrália e UK para "De nada / Sem estresse"!',
+          },
+          {
+            id: 'u7-e2',
+            type: 'word-bank',
+            prompt: 'Traduza a expressão: "Sem pressa / Com calma"',
+            portuguesePhrase: 'Sem pressa / Leve o tempo que precisar',
+            options: ['Take', 'your', 'time', 'Hurry', 'up', 'fast', 'slow'],
+            correctAnswer: ['Take', 'your', 'time'],
+            audioText: 'Take your time',
+          },
+          {
+            id: 'u7-e3',
+            type: 'match-pairs',
+            prompt: 'Ligue cada expressão nativa ao seu real significado:',
+            pairItems: [
+              { en: 'No worries', pt: 'Sem problemas / Tranquilo' },
+              { en: 'Take your time', pt: 'Sem pressa / Vá no seu tempo' },
+              { en: "It's up to you", pt: 'Você que decide / Fica a seu critério' },
+              { en: 'Keep in touch', pt: 'Vamos manter contato' },
+            ],
+            correctAnswer: '',
+          },
+          {
+            id: 'u7-e4',
+            type: 'speech',
+            prompt: 'Diga a expressão com naturalidade:',
+            englishPhrase: 'Take your time',
+            portuguesePhrase: 'Sem pressa / Vá no seu tempo',
+            correctAnswer: 'Take your time',
+            audioText: 'Take your time',
+          },
+        ],
+      },
+    ],
+  },
 ];
+

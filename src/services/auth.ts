@@ -15,6 +15,8 @@ export interface AuthUserProfile {
   completedToday: boolean;
   coupleCode?: string;
   partnerCode?: string;
+  level?: 'A1' | 'A2' | 'B1';
+  placementCompleted?: boolean;
 }
 
 // Global registry of all real users on the platform

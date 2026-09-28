@@ -10,12 +10,14 @@ import { Quests } from './components/Quests';
 import { ProfileView } from './components/ProfileView';
 import { LessonModal } from './components/LessonModal';
 import { LoginScreen } from './components/LoginScreen';
+import { PlacementTestModal } from './components/PlacementTestModal';
 import type { Lesson } from './data/courses';
 
 const MainApp: React.FC = () => {
   const { isAuthenticated, currentUser } = useUser();
   const [currentTab, setCurrentTab] = useState<TabType>('learn');
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
+  const [showPlacementModal, setShowPlacementModal] = useState<boolean>(false);
 
   // If user is not logged in on this device, show Login Screen
   if (!isAuthenticated || !currentUser) {
@@ -33,7 +35,10 @@ const MainApp: React.FC = () => {
 
         <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-6">
           {currentTab === 'learn' && (
-            <LearnPath onStartLesson={(lesson) => setActiveLesson(lesson)} />
+            <LearnPath
+              onStartLesson={(lesson) => setActiveLesson(lesson)}
+              onOpenPlacementTest={() => setShowPlacementModal(true)}
+            />
           )}
 
           {currentTab === 'couple' && <CoupleDashboard />}
@@ -52,6 +57,11 @@ const MainApp: React.FC = () => {
           lesson={activeLesson}
           onClose={() => setActiveLesson(null)}
         />
+      )}
+
+      {/* Placement Test (Nivelamento) Modal */}
+      {showPlacementModal && (
+        <PlacementTestModal onClose={() => setShowPlacementModal(false)} />
       )}
     </div>
   );

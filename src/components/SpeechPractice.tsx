@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Mic, Square, Volume2 } from 'lucide-react';
 import { validatePronunciation } from '../utils/speechValidator';
 import { sound, speakEnglish } from '../utils/audio';
+import { MicrophoneSelector } from './MicrophoneSelector';
 
 interface SpeechPracticeProps {
   expectedPhrase: string;
@@ -274,6 +275,11 @@ export const SpeechPractice: React.FC<SpeechPracticeProps> = ({
         >
           Não posso falar agora / Pular exercício
         </button>
+      </div>
+
+      {/* Microphone Device Selector & Live Volume Test */}
+      <div className="pt-4 border-t border-slate-200">
+        <MicrophoneSelector />
       </div>
     </div>
   );

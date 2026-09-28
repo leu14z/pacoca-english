@@ -26,6 +26,7 @@ interface UserContextType {
   sendCoupleNudge: (message: string) => void;
   clearNudge: () => void;
   updateUserName: (newName: string) => void;
+  setPlacementLevel: (level: 'A1' | 'A2' | 'B1') => void;
   resetAllData: () => void;
 }
 
@@ -226,6 +227,18 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     saveRegisteredUser(updated);
   };
 
+  const setPlacementLevel = (level: 'A1' | 'A2' | 'B1') => {
+    if (!currentUser) return;
+    const updated: AuthUserProfile = {
+      ...currentUser,
+      level,
+      placementCompleted: true,
+    };
+    setCurrentUser(updated);
+    saveRegisteredUser(updated);
+    localStorage.setItem('pacoca_current_user_v3', JSON.stringify(updated));
+  };
+
   const resetAllData = () => {
     localStorage.removeItem('pacoca_current_user_v3');
     localStorage.removeItem('pacoca_registered_users_v3');
@@ -252,6 +265,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         sendCoupleNudge,
         clearNudge,
         updateUserName,
+        setPlacementLevel,
         resetAllData,
       }}
     >

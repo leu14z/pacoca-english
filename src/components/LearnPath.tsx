@@ -8,9 +8,10 @@ import { sound } from '../utils/audio';
 
 interface LearnPathProps {
   onStartLesson: (lesson: Lesson) => void;
+  onOpenPlacementTest?: () => void;
 }
 
-export const LearnPath: React.FC<LearnPathProps> = ({ onStartLesson }) => {
+export const LearnPath: React.FC<LearnPathProps> = ({ onStartLesson, onOpenPlacementTest }) => {
   const { currentUser } = useUser();
 
   if (!currentUser) return null;
@@ -24,7 +25,39 @@ export const LearnPath: React.FC<LearnPathProps> = ({ onStartLesson }) => {
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-12 pb-24">
+    <div className="max-w-2xl mx-auto space-y-10 pb-24">
+      {/* Placement Test Interactive Banner */}
+      <div className="bg-linear-to-r from-indigo-600 via-sky-600 to-emerald-600 p-5 sm:p-6 rounded-3xl text-white shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4 border-2 border-white/20 relative overflow-hidden">
+        <div className="flex items-center gap-3.5 relative z-10 text-left">
+          <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0 border border-white/30 shadow-inner">
+            <Compass className="w-6 h-6 text-amber-300" />
+          </div>
+          <div>
+            <span className="text-[10px] font-black uppercase tracking-widest text-sky-200 block">
+              {currentUser.placementCompleted ? `Nível Classificado: ${currentUser.level || 'A1'}` : 'Descubra seu Nível Oficial'}
+            </span>
+            <h4 className="font-fredoka text-lg sm:text-xl font-black leading-tight text-white">
+              {currentUser.placementCompleted ? 'Refazer Teste de Nivelamento' : '🎯 Teste de Nivelamento Inicial'}
+            </h4>
+            <p className="text-white/90 text-xs font-semibold max-w-sm">
+              Quiz rápido de 12 perguntas (vocabulário, áudio e gramática) para você ou seus pais começarem no nível ideal!
+            </p>
+          </div>
+        </div>
+
+        {onOpenPlacementTest && (
+          <button
+            type="button"
+            onClick={() => {
+              sound.playClick();
+              onOpenPlacementTest();
+            }}
+            className="w-full sm:w-auto px-5 py-3 bg-white text-indigo-700 hover:bg-slate-100 font-black text-xs uppercase tracking-wider rounded-2xl cursor-pointer shadow-md transition-all active:scale-95 shrink-0 z-10"
+          >
+            {currentUser.placementCompleted ? 'Refazer Teste' : 'Fazer Teste Agora'}
+          </button>
+        )}
+      </div>
       {COURSE_UNITS.map((unit, unitIdx) => {
         const prevUnit = COURSE_UNITS[unitIdx - 1];
         const isNewModule = !prevUnit || prevUnit.moduleTitle !== unit.moduleTitle;
