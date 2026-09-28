@@ -107,12 +107,18 @@ export const LearnPath: React.FC<LearnPathProps> = ({ onStartLesson, onOpenPlace
             <div className="flex flex-col items-center gap-8 relative">
               {unit.lessons.map((lesson, lessonIdx) => {
                 const completed = isLessonCompleted(lesson.id);
-                // First lesson of unit 1 is always unlocked for fresh accounts
                 const isFirstEver = unitIdx === 0 && lessonIdx === 0;
                 const prevLessonInUnit = unit.lessons[lessonIdx - 1];
                 const prevUnitLastLesson = prevUnit?.lessons[prevUnit.lessons.length - 1];
 
-                const isLocked = !completed && !isFirstEver && (
+                // Level placement unlocks
+                const userLevel = currentUser.level || 'A1';
+                const isUnlockedByLevel =
+                  (userLevel === 'B1' && lessonIdx === 0) ||
+                  (userLevel === 'A2' && unitIdx <= 4 && lessonIdx === 0) ||
+                  isFirstEver;
+
+                const isLocked = !completed && !isUnlockedByLevel && (
                   lessonIdx > 0
                     ? !isLessonCompleted(prevLessonInUnit?.id || '')
                     : !isLessonCompleted(prevUnitLastLesson?.id || '')
