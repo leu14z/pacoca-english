@@ -54,20 +54,6 @@ export const LoginScreen: React.FC = () => {
             auto_select: false,
           });
 
-          // Render official Google Sign-In button if element exists
-          const buttonDiv = document.getElementById('officialGoogleButtonDiv');
-          if (buttonDiv) {
-            buttonDiv.innerHTML = '';
-            (window as any).google.accounts.id.renderButton(buttonDiv, {
-              theme: 'outline',
-              size: 'large',
-              width: 320,
-              text: 'continue_with',
-              shape: 'pill',
-              logo_alignment: 'left',
-            });
-          }
-
           // Optional: Google One Tap prompt
           (window as any).google.accounts.id.prompt();
         } catch (err) {
@@ -199,9 +185,6 @@ export const LoginScreen: React.FC = () => {
               <span>{errorMessage}</span>
             </div>
           )}
-
-          {/* Official Google Button rendered by Google Identity Services if Client ID exists */}
-          <div id="officialGoogleButtonDiv" className="w-full flex justify-center empty:hidden"></div>
 
           {/* Primary 3D Google Sign-In Button */}
           <button
