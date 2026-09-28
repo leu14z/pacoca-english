@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { X, Volume2, Snail, Mic, CheckCircle2, XCircle, Heart, RotateCcw, Square } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Volume2, Snail, CheckCircle2, XCircle, Heart, RotateCcw } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { motion } from 'framer-motion';
 import type { Lesson, Exercise } from '../data/courses';
@@ -7,7 +7,7 @@ import { useUser } from '../context/UserContext';
 import { Mascot } from './Mascot';
 import { sound, speakEnglish } from '../utils/audio';
 import type { MascotMood } from '../utils/mascot';
-import { startAccurateSpeechRecognition, type SpeechSession, type SpeechEvaluationResult } from '../utils/speech';
+import { SpeechPractice } from './SpeechPractice';
 
 interface LessonModalProps {
   lesson: Lesson;
@@ -35,13 +35,6 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
   const [mascotMood, setMascotMood] = useState<MascotMood>('official');
   const [mascotSpeech, setMascotSpeech] = useState<string | undefined>(undefined);
 
-  // Speech Recognition States
-  const [isRecording, setIsRecording] = useState(false);
-  const [speechStatusMsg, setSpeechStatusMsg] = useState('');
-  const [liveSpokenText, setLiveSpokenText] = useState('');
-  const [evaluationFeedback, setEvaluationFeedback] = useState<string | null>(null);
-  const speechSessionRef = useRef<SpeechSession | null>(null);
-
   const currentExercise: Exercise = exerciseList[currentIndex];
   const progressPercent = ((currentIndex) / exerciseList.length) * 100;
 
@@ -51,15 +44,6 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
     setStatus('answering');
     setSelectedAnswer(null);
     setSelectedPair(null);
-    setIsRecording(false);
-    setSpeechStatusMsg('');
-    setLiveSpokenText('');
-    setEvaluationFeedback(null);
-
-    if (speechSessionRef.current) {
-      speechSessionRef.current.stop();
-      speechSessionRef.current = null;
-    }
 
     if (currentExercise.type === 'word-bank' || currentExercise.type === 'listen-bank') {
       const words = [...(currentExercise.options || [])].sort(() => Math.random() - 0.5);
@@ -93,15 +77,6 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
       setMascotSpeech(currentExercise.tip);
     }
   }, [currentIndex, isReviewMode]);
-
-  // Clean up recording on unmount
-  useEffect(() => {
-    return () => {
-      if (speechSessionRef.current) {
-        speechSessionRef.current.stop();
-      }
-    };
-  }, []);
 
   if (!currentUser) return null;
 
@@ -159,95 +134,11 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
     }
   };
 
-  // Start accurate speech recognition
-  const handleStartSpeech = () => {
-    sound.playClick();
-    setIsRecording(true);
-    setSpeechStatusMsg('');
-    setLiveSpokenText('');
-    setEvaluationFeedback(null);
-
-    const targetPhrase = currentExercise.englishPhrase || (currentExercise.correctAnswer as string);
-
-    speechSessionRef.current = startAccurateSpeechRecognition(
-      targetPhrase,
-      (interim) => {
-        setLiveSpokenText(interim);
-      },
-      (newStatus, msg) => {
-        if (newStatus === 'listening') {
-          setIsRecording(true);
-          setSpeechStatusMsg('🎙️ Ouvindo... Pode falar agora!');
-          setMascotMood('official');
-        } else if (newStatus === 'evaluating') {
-          setIsRecording(false);
-          setSpeechStatusMsg('Avaliando pronúncia...');
-        } else if (newStatus === 'no-speech') {
-          setIsRecording(false);
-          setSpeechStatusMsg(msg || 'Não ouvimos nenhum som. Toque no microfone para falar.');
-          setMascotMood('tip');
-          setMascotSpeech('Não consegui te ouvir! Toque no microfone e fale perto dele.');
-        } else if (newStatus === 'error') {
-          setIsRecording(false);
-          setSpeechStatusMsg(msg || 'Aviso do microfone.');
-          setMascotMood('surprised');
-          setMascotSpeech(msg || 'Verifique se o microfone está liberado no navegador.');
-        } else if (newStatus === 'done') {
-          setIsRecording(false);
-        }
-      },
-      (result: SpeechEvaluationResult) => {
-        setIsRecording(false);
-        setEvaluationFeedback(result.feedback);
-
-        // Safety check: Never penalize empty transcript
-        if (!result.transcript || result.transcript.trim().length === 0) {
-          setSpeechStatusMsg('Nenhum som reconhecível. Toque no microfone para falar!');
-          setMascotMood('tip');
-          setMascotSpeech('Fale com firmeza perto do microfone.');
-          return;
-        }
-
-        if (result.isMatch) {
-          // Genuine match!
-          sound.playSuccess();
-          setStatus('correct');
-          setCombo((c) => c + 1);
-          setMascotMood('correct');
-          setMascotSpeech(`Sensacional! Pronúncia correta (${result.score}% de precisão)!`);
-        } else {
-          // FAILED with actual wrong words!
-          sound.playError();
-          loseHeart();
-          setStatus('incorrect');
-          setCombo(0);
-          setMascotMood('wrong');
-          setMascotSpeech(result.feedback);
-
-          // Add to review queue
-          if (!reviewQueue.some((q) => q.id === currentExercise.id)) {
-            setReviewQueue((prev) => [...prev, currentExercise]);
-          }
-        }
-      }
-    );
-  };
-
-  const handleStopSpeech = () => {
-    if (speechSessionRef.current) {
-      speechSessionRef.current.stop();
-      speechSessionRef.current = null;
-    }
-    setIsRecording(false);
-  };
-
   // Immediate retry on mistake
   const handleRetryNow = () => {
     sound.playClick();
     setStatus('answering');
     setSelectedAnswer(null);
-    setLiveSpokenText('');
-    setEvaluationFeedback(null);
 
     if (currentExercise.type === 'word-bank' || currentExercise.type === 'listen-bank') {
       const words = [...(currentExercise.options || [])].sort(() => Math.random() - 0.5);
@@ -587,95 +478,36 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
           </div>
         )}
 
-        {/* Exercise Type 4: Speech Practice with Strict Pronunciation Evaluation */}
+        {/* Exercise Type 4: Speech Practice with Strict Levenshtein Evaluation */}
         {currentExercise.type === 'speech' && (
-          <div className="text-center py-4 space-y-5">
-            <div className="p-6 bg-sky-50 border-2 border-sky-200 rounded-3xl">
-              <span className="text-xs font-black uppercase text-sky-600 tracking-wider block mb-2">
-                Fale esta frase em voz alta:
-              </span>
-              <p className="text-2xl font-black text-slate-800 mb-3">
-                "{currentExercise.englishPhrase}"
-              </p>
-              <button
-                onClick={() => speakEnglish(currentExercise.englishPhrase!)}
-                className="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-sky-300 rounded-xl text-sky-700 hover:bg-sky-100 font-bold text-xs cursor-pointer transition-colors shadow-2xs"
-              >
-                <Volume2 className="w-4 h-4" />
-                <span>Ouvir pronúncia nativa</span>
-              </button>
-            </div>
+          <SpeechPractice
+            key={currentExercise.id}
+            expectedPhrase={currentExercise.englishPhrase || (currentExercise.correctAnswer as string)}
+            disabled={status !== 'answering'}
+            onSuccess={(score) => {
+              sound.playSuccess();
+              setStatus('correct');
+              setCombo((c) => c + 1);
+              setMascotMood('correct');
+              setMascotSpeech(`Sensacional! Pronúncia correta (${score}% de precisão)!`);
+            }}
+            onFailure={(feedback) => {
+              sound.playError();
+              loseHeart();
+              setStatus('incorrect');
+              setCombo(0);
+              setMascotMood('wrong');
+              setMascotSpeech(feedback);
 
-            {/* Microphone Button */}
-            <div className="flex flex-col items-center">
-              {isRecording ? (
-                <div className="flex flex-col items-center gap-3">
-                  <button
-                    onClick={handleStopSpeech}
-                    className="w-24 h-24 rounded-full bg-rose-500 text-white flex items-center justify-center cursor-pointer shadow-lg animate-pulse scale-110"
-                    title="Toque para parar e avaliar"
-                  >
-                    <Square className="w-9 h-9 fill-white" />
-                  </button>
-                  <span className="text-rose-600 font-black text-xs uppercase tracking-wider animate-bounce">
-                    🎙️ Gravando... Fale agora! (Toque no quadrado para finalizar)
-                  </span>
-                </div>
-              ) : (
-                <button
-                  onClick={handleStartSpeech}
-                  className="w-24 h-24 rounded-full btn-3d-blue flex items-center justify-center cursor-pointer shadow-lg active:scale-95 transition-all"
-                  title="Toque para falar"
-                >
-                  <Mic className="w-10 h-10 text-white" />
-                </button>
-              )}
-
-              {!isRecording && (
-                <span className="text-slate-700 font-black text-sm mt-3">
-                  Toque no microfone e pronuncie a frase
-                </span>
-              )}
-
-              {/* Real words being detected live */}
-              {liveSpokenText && (
-                <div className="mt-3 p-3 bg-slate-100 border border-slate-300 rounded-2xl max-w-sm">
-                  <span className="text-[11px] font-black uppercase text-slate-500 block mb-0.5">
-                    Ouvido pelo microfone:
-                  </span>
-                  <p className="text-base font-black text-slate-800">
-                    "{liveSpokenText}"
-                  </p>
-                </div>
-              )}
-
-              {/* Error or status message */}
-              {speechStatusMsg && !liveSpokenText && (
-                <div className="mt-3 p-3 bg-amber-50 border border-amber-300 rounded-2xl max-w-sm text-xs text-amber-900 font-bold text-center">
-                  {speechStatusMsg}
-                </div>
-              )}
-
-              {/* Pronunciation Feedback message if failed */}
-              {evaluationFeedback && status === 'incorrect' && (
-                <div className="mt-3 p-3 bg-rose-50 border border-rose-300 rounded-2xl max-w-sm text-xs text-rose-900 font-bold text-center">
-                  {evaluationFeedback}
-                </div>
-              )}
-            </div>
-
-            <div className="pt-2">
-              <button
-                onClick={() => {
-                  sound.playClick();
-                  handleSuccess();
-                }}
-                className="text-xs text-slate-400 hover:text-slate-600 underline font-bold cursor-pointer"
-              >
-                Não posso falar agora / Pular exercício
-              </button>
-            </div>
-          </div>
+              // Add to review queue
+              if (!reviewQueue.some((q) => q.id === currentExercise.id)) {
+                setReviewQueue((prev) => [...prev, currentExercise]);
+              }
+            }}
+            onSkip={() => {
+              handleSuccess();
+            }}
+          />
         )}
 
         {/* Exercise Type 5: Dialogue Story */}
