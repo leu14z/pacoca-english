@@ -18,7 +18,7 @@ interface UserContextType {
   partner: AuthUserProfile | null;
   isAuthenticated: boolean;
   coupleStats: CoupleStats;
-  loginUser: (email: string, name: string, avatar?: string) => void;
+  loginUser: (email: string, name: string, avatar?: string, id?: string) => void;
   logout: () => void;
   linkPartnerCode: (code: string) => boolean;
   completeLesson: (lessonId: string, xpGained: number) => void;
@@ -96,20 +96,31 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [currentUser, allLearners]);
 
   // Login or Register a user with complete fresh zero stats
-  const loginUser = (email: string, name: string, avatar?: string) => {
+  const loginUser = (email: string, name: string, avatar?: string, id?: string) => {
     const cleanEmail = email.trim().toLowerCase();
     const cleanName = name.trim() || cleanEmail.split('@')[0];
     const registered = getRegisteredUsers();
     const existing = registered.find((u) => u.email.toLowerCase() === cleanEmail);
 
+    // Ensure valid UUID for Postgres profiles table
+    const safeId =
+      id ||
+      (existing?.id && existing.id.includes('-') ? existing.id : crypto.randomUUID());
+
     if (existing) {
-      // Existing user: preserve their real progress
-      setCurrentUser(existing);
+      // Existing user: preserve their real progress and ensure valid UUID id
+      const updatedExisting: AuthUserProfile = {
+        ...existing,
+        id: id || safeId,
+        avatar: avatar || existing.avatar,
+      };
+      saveRegisteredUser(updatedExisting);
+      setCurrentUser(updatedExisting);
     } else {
       // New user: START COMPLETELY ZEROED!
       const randomCode = `PACOCA-${Math.floor(1000 + Math.random() * 9000)}`;
       const newUser: AuthUserProfile = {
-        id: `user_${Date.now()}`,
+        id: safeId,
         name: cleanName,
         email: cleanEmail,
         avatar: avatar || './mascot/mascoteoficial.png',
@@ -142,7 +153,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           email.split('@')[0];
         const avatar =
           session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture;
-        loginUser(email, name, avatar);
+        loginUser(email, name, avatar, session.user.id);
       }
     });
 
@@ -157,7 +168,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           email.split('@')[0];
         const avatar =
           session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture;
-        loginUser(email, name, avatar);
+        loginUser(email, name, avatar, session.user.id);
       }
     });
 
