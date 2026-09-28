@@ -91,35 +91,55 @@ export const LoginScreen: React.FC = () => {
     });
   }, [googleClientId, loginUser]);
 
-  // Handle Sign In click
-  const handleGoogleSignIn = async () => {
+  // Handle Sign In click with clean Google OAuth2 popup (no supabase.co url shown to users!)
+  const handleGoogleSignIn = () => {
     sound.playClick();
     setIsLoading(true);
     setErrorMessage(null);
 
-    // First attempt: trigger Google Identity Services in-app prompt
-    if (gsiLoadedRef.current && (window as any).google?.accounts?.id) {
-      let promptDisplayed = false;
-      (window as any).google.accounts.id.prompt((notification: any) => {
-        if (notification.isDisplayed()) {
-          promptDisplayed = true;
-          setIsLoading(false);
-        } else if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-          // If in-app prompt cannot be shown, fall back to Supabase OAuth redirect
-          executeFallbackRedirect();
-        }
-      });
+    // Primary: Official Google OAuth2 popup dialog
+    if ((window as any).google?.accounts?.oauth2) {
+      try {
+        const client = (window as any).google.accounts.oauth2.initTokenClient({
+          client_id: googleClientId,
+          scope: 'email profile openid',
+          callback: async (tokenResponse: any) => {
+            if (tokenResponse?.error) {
+              setIsLoading(false);
+              if (tokenResponse.error !== 'popup_closed_by_user') {
+                setErrorMessage('Não foi possível concluir o login com o Google.');
+              }
+              return;
+            }
 
-      // Timeout safeguard: if prompt doesn't show in 1.5s, execute redirect
-      setTimeout(() => {
-        if (!promptDisplayed && isLoading) {
-          executeFallbackRedirect();
-        }
-      }, 1500);
-      return;
+            if (tokenResponse?.access_token) {
+              try {
+                const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                  headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
+                });
+                if (res.ok) {
+                  const data = await res.json();
+                  sound.playSuccess();
+                  loginUser(data.email, data.name || data.given_name || 'Aluno', data.picture);
+                  setIsLoading(false);
+                  return;
+                }
+              } catch (fetchErr) {
+                console.warn('Erro ao buscar dados do Google:', fetchErr);
+              }
+            }
+            setIsLoading(false);
+          },
+        });
+
+        client.requestAccessToken();
+        return;
+      } catch (err) {
+        console.warn('Google oauth2 client init notice:', err);
+      }
     }
 
-    // Direct fallback if GSI not ready
+    // Secondary fallback: Supabase redirect
     executeFallbackRedirect();
   };
 
