@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Flame, Gem, Trophy, Check, Edit2, RotateCcw, LogOut, Key } from 'lucide-react';
+import { Flame, Gem, Trophy, Check, Edit2, RotateCcw, LogOut, Volume2 } from 'lucide-react';
 import { useUser } from '../context/UserContext';
-import { sound } from '../utils/audio';
-import { saveFirebaseConfig } from '../services/firebase';
+import { sound, getSavedVoicePreference, setSavedVoicePreference, type PreferredVoiceStyle } from '../utils/audio';
+import { PacocaBadge } from './PacocaBadge';
 
 export const ProfileView: React.FC = () => {
   const {
@@ -14,10 +14,8 @@ export const ProfileView: React.FC = () => {
 
   const [isEditingName, setIsEditingName] = useState(false);
   const [tempName, setTempName] = useState(currentUser?.name || '');
-  const [showFirebaseModal, setShowFirebaseModal] = useState(false);
-  const [fbApiKey, setFbApiKey] = useState('');
-  const [fbProjectId, setFbProjectId] = useState('');
-  const [fbConfigSaved, setFbConfigSaved] = useState(false);
+  const [voiceStyle, setVoiceStyle] = useState<PreferredVoiceStyle>(() => getSavedVoicePreference());
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   if (!currentUser) return null;
 
@@ -29,36 +27,26 @@ export const ProfileView: React.FC = () => {
     }
   };
 
-  const handleSaveFirebase = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!fbApiKey || !fbProjectId) return;
-    saveFirebaseConfig({
-      apiKey: fbApiKey.trim(),
-      projectId: fbProjectId.trim(),
-      authDomain: `${fbProjectId.trim()}.firebaseapp.com`,
-    });
-    sound.playSuccess();
-    setFbConfigSaved(true);
-    setTimeout(() => {
-      setFbConfigSaved(false);
-      setShowFirebaseModal(false);
-    }, 2000);
+  const handleVoiceChange = (style: PreferredVoiceStyle) => {
+    sound.playClick();
+    setVoiceStyle(style);
+    setSavedVoicePreference(style);
   };
+
+  const levelBadge =
+    currentUser.level === 'A1'
+      ? 'level-a1'
+      : currentUser.level === 'A2'
+      ? 'level-a2'
+      : 'level-b1';
 
   return (
     <div className="max-w-2xl mx-auto space-y-6 pb-24">
-      {/* Profile Card Header */}
-      <div className="bg-white border-2 border-slate-200 rounded-3xl p-6 sm:p-8 shadow-sm">
+      {/* Student ID Card with Paçoca Badge */}
+      <div className="bg-white border-2 border-slate-200 border-b-6 border-b-slate-300 rounded-3xl p-6 sm:p-8 shadow-xs">
         <div className="flex flex-col sm:flex-row items-center gap-6">
-          <div className="relative">
-            <img
-              src={currentUser.avatar}
-              alt={currentUser.name}
-              className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl object-contain bg-amber-50 p-2 border-4 border-amber-300 shadow-md"
-            />
-            <span className="absolute -bottom-2 -right-2 bg-emerald-500 text-white text-xs font-black px-2 py-0.5 rounded-full border-2 border-white shadow-xs">
-              ATIVO
-            </span>
+          <div className="relative shrink-0">
+            <PacocaBadge badge={levelBadge} size="lg" />
           </div>
 
           <div className="text-center sm:text-left flex-1">
@@ -68,12 +56,13 @@ export const ProfileView: React.FC = () => {
                   type="text"
                   value={tempName}
                   onChange={(e) => setTempName(e.target.value)}
-                  className="px-3 py-1.5 border-2 border-amber-400 rounded-xl font-black text-xl text-slate-800 focus:outline-hidden"
+                  className="px-3 py-1.5 border-2 border-amber-400 rounded-xl font-black text-xl text-slate-800 focus:outline-none"
                   autoFocus
                 />
                 <button
+                  type="button"
                   onClick={handleSaveName}
-                  className="px-3 py-2 btn-3d-green rounded-xl font-bold text-xs cursor-pointer"
+                  className="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-black text-xs cursor-pointer shadow-xs"
                 >
                   Salvar
                 </button>
@@ -84,6 +73,7 @@ export const ProfileView: React.FC = () => {
                   {currentUser.name}
                 </h2>
                 <button
+                  type="button"
                   onClick={() => {
                     sound.playClick();
                     setIsEditingName(true);
@@ -96,166 +86,163 @@ export const ProfileView: React.FC = () => {
               </div>
             )}
 
-            <p className="text-xs sm:text-sm font-bold text-slate-500 mb-4">
-              Código de Casal: <span className="font-mono font-black text-slate-700">{currentUser.coupleCode}</span>
+            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-2">
+              <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 rounded-full font-black text-xs uppercase">
+                Nível {currentUser.level || 'A1'}
+              </span>
+              <span className="text-xs font-bold text-slate-400">
+                Aluno Oficial • Paçoca English
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-500 font-medium">
+              Código de Parceria: <span className="font-mono font-black text-slate-700 bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200">{currentUser.coupleCode}</span>
             </p>
+          </div>
+        </div>
+      </div>
 
-            {/* Actions: Firebase config & Logout */}
-            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
-              <button
-                onClick={() => setShowFirebaseModal(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-black text-slate-700 cursor-pointer transition-colors"
-              >
-                <Key className="w-3.5 h-3.5 text-amber-600" />
-                <span>Configurar Chave Google / Firebase</span>
-              </button>
+      {/* Stats Summary Grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="bg-white border-2 border-slate-200 border-b-4 border-b-slate-300 rounded-2xl p-4 text-center shadow-2xs">
+          <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center mx-auto mb-1.5">
+            <Trophy className="w-4 h-4 text-amber-600" />
+          </div>
+          <span className="font-black text-xl text-slate-800 block">{currentUser.xp}</span>
+          <span className="text-[11px] font-bold text-slate-400 uppercase">Total XP</span>
+        </div>
 
+        <div className="bg-white border-2 border-slate-200 border-b-4 border-b-slate-300 rounded-2xl p-4 text-center shadow-2xs">
+          <div className="w-8 h-8 rounded-xl bg-orange-100 flex items-center justify-center mx-auto mb-1.5">
+            <Flame className="w-4 h-4 text-orange-600 fill-orange-500" />
+          </div>
+          <span className="font-black text-xl text-slate-800 block">{currentUser.streak}</span>
+          <span className="text-[11px] font-bold text-slate-400 uppercase">Dias de Ofensiva</span>
+        </div>
+
+        <div className="bg-white border-2 border-slate-200 border-b-4 border-b-slate-300 rounded-2xl p-4 text-center shadow-2xs">
+          <div className="w-8 h-8 rounded-xl bg-sky-100 flex items-center justify-center mx-auto mb-1.5">
+            <Gem className="w-4 h-4 text-sky-600 fill-sky-500" />
+          </div>
+          <span className="font-black text-xl text-slate-800 block">{currentUser.diamonds || 0}</span>
+          <span className="text-[11px] font-bold text-slate-400 uppercase">Gemas / Diamantes</span>
+        </div>
+
+        <div className="bg-white border-2 border-slate-200 border-b-4 border-b-slate-300 rounded-2xl p-4 text-center shadow-2xs">
+          <div className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center mx-auto mb-1.5">
+            <Check className="w-4 h-4 text-emerald-600 stroke-[3]" />
+          </div>
+          <span className="font-black text-xl text-slate-800 block">{currentUser.completedLessons.length}</span>
+          <span className="text-[11px] font-bold text-slate-400 uppercase">Lições Feitas</span>
+        </div>
+      </div>
+
+      {/* Audio & Natural Voice Preferences */}
+      <div className="bg-white border-2 border-slate-200 border-b-6 border-b-slate-300 rounded-3xl p-6 shadow-xs space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-sky-100 flex items-center justify-center text-sky-700 shrink-0">
+            <Volume2 className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="font-black text-base text-slate-800">
+              Voz de Pronúncia em Inglês
+            </h3>
+            <p className="text-xs text-slate-400 font-medium">
+              Escolha o estilo de voz nativa utilizado nos áudios do aplicativo.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+          <button
+            type="button"
+            onClick={() => handleVoiceChange('female-natural')}
+            className={`p-3.5 rounded-2xl border-2 text-left transition-colors cursor-pointer ${
+              voiceStyle === 'female-natural'
+                ? 'bg-sky-50 border-sky-500 text-sky-800 font-black border-b-4 border-b-sky-600'
+                : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700 font-bold'
+            }`}
+          >
+            <span className="text-xs font-black block">Natural Feminina</span>
+            <span className="text-[11px] text-slate-400 font-medium">Clara e amigável</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleVoiceChange('male-british')}
+            className={`p-3.5 rounded-2xl border-2 text-left transition-colors cursor-pointer ${
+              voiceStyle === 'male-british'
+                ? 'bg-sky-50 border-sky-500 text-sky-800 font-black border-b-4 border-b-sky-600'
+                : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700 font-bold'
+            }`}
+          >
+            <span className="text-xs font-black block">Natural Britânica</span>
+            <span className="text-[11px] text-slate-400 font-medium">Sotaque refinado</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleVoiceChange('google-natural')}
+            className={`p-3.5 rounded-2xl border-2 text-left transition-colors cursor-pointer ${
+              voiceStyle === 'google-natural'
+                ? 'bg-sky-50 border-sky-500 text-sky-800 font-black border-b-4 border-b-sky-600'
+                : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700 font-bold'
+            }`}
+          >
+            <span className="text-xs font-black block">Americana Padrão</span>
+            <span className="text-[11px] text-slate-400 font-medium">Conversação diária</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Account Management & Reset */}
+      <div className="bg-white border-2 border-slate-200 border-b-6 border-b-slate-300 rounded-3xl p-6 shadow-xs space-y-4">
+        <h3 className="font-black text-base text-slate-800">
+          Gerenciamento da Conta
+        </h3>
+
+        <div className="flex flex-col sm:flex-row gap-3 pt-1">
+          <button
+            type="button"
+            onClick={logout}
+            className="flex-1 py-3 px-4 bg-slate-100 hover:bg-slate-200 border-2 border-slate-300 rounded-2xl font-black text-xs text-slate-700 flex items-center justify-center gap-2 cursor-pointer transition-colors"
+          >
+            <LogOut className="w-4 h-4 text-slate-500" />
+            <span>Trocar de Conta</span>
+          </button>
+
+          {!showResetConfirm ? (
+            <button
+              type="button"
+              onClick={() => setShowResetConfirm(true)}
+              className="py-3 px-4 text-rose-600 hover:bg-rose-50 border-2 border-rose-200 rounded-2xl font-black text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors"
+            >
+              <RotateCcw className="w-4 h-4" />
+              <span>Reiniciar Progresso</span>
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
               <button
+                type="button"
                 onClick={() => {
                   sound.playClick();
-                  logout();
+                  resetAllData();
                 }}
-                className="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-black cursor-pointer transition-colors"
+                className="py-3 px-4 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl font-black text-xs cursor-pointer shadow-xs transition-colors"
               >
-                <LogOut className="w-3.5 h-3.5" />
-                <span>Sair da Conta</span>
+                Confirmar Reinício
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowResetConfirm(false)}
+                className="py-3 px-3 text-slate-500 font-bold text-xs cursor-pointer"
+              >
+                Cancelar
               </button>
             </div>
-          </div>
+          )}
         </div>
       </div>
-
-      {/* Stats Grid */}
-      <h3 className="font-fredoka text-xl text-slate-800 font-bold px-1">
-        Suas Estatísticas
-      </h3>
-
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="bg-white border-2 border-slate-200 rounded-2xl p-4 text-center">
-          <div className="w-8 h-8 mx-auto mb-2 text-amber-500">
-            <Flame className="w-full h-full fill-amber-500" />
-          </div>
-          <span className="text-2xl font-black text-slate-800 block">{currentUser.streak}</span>
-          <span className="text-xs font-bold text-slate-400">Dias de Ofensiva</span>
-        </div>
-
-        <div className="bg-white border-2 border-slate-200 rounded-2xl p-4 text-center">
-          <div className="w-8 h-8 mx-auto mb-2 text-sky-500">
-            <Gem className="w-full h-full fill-sky-500" />
-          </div>
-          <span className="text-2xl font-black text-slate-800 block">{currentUser.diamonds}</span>
-          <span className="text-xs font-bold text-slate-400">Gemas Acumuladas</span>
-        </div>
-
-        <div className="bg-white border-2 border-slate-200 rounded-2xl p-4 text-center">
-          <div className="w-8 h-8 mx-auto mb-2 text-amber-500">
-            <Trophy className="w-full h-full text-amber-500" />
-          </div>
-          <span className="text-2xl font-black text-slate-800 block">{currentUser.xp}</span>
-          <span className="text-xs font-bold text-slate-400">Total de XP</span>
-        </div>
-
-        <div className="bg-white border-2 border-slate-200 rounded-2xl p-4 text-center">
-          <div className="w-8 h-8 mx-auto mb-2 text-emerald-500">
-            <Check className="w-full h-full stroke-[3]" />
-          </div>
-          <span className="text-2xl font-black text-slate-800 block">
-            {currentUser.completedLessons.length}
-          </span>
-          <span className="text-xs font-bold text-slate-400">Lições Concluídas</span>
-        </div>
-      </div>
-
-      {/* GitHub & Hosting Instructions */}
-      <div className="bg-sky-50 border-2 border-sky-200 rounded-3xl p-6">
-        <h4 className="font-fredoka text-lg font-black text-sky-900 mb-2">
-          Publicação no GitHub Pages
-        </h4>
-        <p className="text-xs sm:text-sm font-semibold text-sky-800 leading-relaxed mb-3">
-          O projeto está 100% pronto para o GitHub Pages. Você no seu celular e sua namorada no celular dela podem abrir o mesmo link no navegador e salvar na tela inicial como um aplicativo nativo!
-        </p>
-      </div>
-
-      {/* Reset Progress Action */}
-      <div className="pt-4 text-center">
-        <button
-          onClick={() => {
-            if (confirm('Deseja redefinir todo o histórico local desta conta?')) {
-              resetAllData();
-            }
-          }}
-          className="text-xs text-rose-500 hover:text-rose-700 font-bold inline-flex items-center gap-1 cursor-pointer"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-          Reiniciar histórico de lições (Reset)
-        </button>
-      </div>
-
-      {/* Firebase Keys Modal */}
-      {showFirebaseModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border-2 border-slate-200 rounded-3xl p-6 max-w-md w-full shadow-2xl">
-            <h3 className="font-fredoka text-2xl text-slate-800 mb-2 font-black">
-              Conectar Projeto Firebase
-            </h3>
-            <p className="text-slate-500 text-xs font-semibold mb-4">
-              Para usar o Google Sign-In real no seu GitHub Pages entre celulares diferentes, cole as credenciais do seu projeto gratuito do Firebase:
-            </p>
-
-            <form onSubmit={handleSaveFirebase} className="space-y-3">
-              <div>
-                <label className="text-xs font-black uppercase text-slate-500 block mb-1">
-                  API Key:
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="AIzaSy..."
-                  value={fbApiKey}
-                  onChange={(e) => setFbApiKey(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border-2 border-slate-200 rounded-xl text-xs font-mono font-bold focus:outline-hidden focus:border-sky-500"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-black uppercase text-slate-500 block mb-1">
-                  Project ID:
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="pacoca-english-xxxx"
-                  value={fbProjectId}
-                  onChange={(e) => setFbProjectId(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border-2 border-slate-200 rounded-xl text-xs font-mono font-bold focus:outline-hidden focus:border-sky-500"
-                />
-              </div>
-
-              {fbConfigSaved && (
-                <p className="text-emerald-600 font-bold text-xs bg-emerald-50 p-2 rounded-xl border border-emerald-200 text-center">
-                  Configuração do Firebase salva com sucesso! ✨
-                </p>
-              )}
-
-              <div className="pt-2 space-y-2">
-                <button
-                  type="submit"
-                  className="w-full py-3 btn-3d-blue rounded-2xl font-black text-sm cursor-pointer"
-                >
-                  Salvar Configurações
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowFirebaseModal(false)}
-                  className="w-full py-2 bg-slate-100 hover:bg-slate-200 rounded-2xl font-extrabold text-slate-600 text-xs cursor-pointer"
-                >
-                  Fechar
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

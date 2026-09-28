@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { AuthUserProfile } from '../services/auth';
 import { getRegisteredUsers, saveRegisteredUser } from '../services/auth';
+import { supabase, syncUserProfile, signOutSupabase } from '../services/supabase';
 
 export interface CoupleStats {
   sharedStreak: number;
@@ -71,6 +72,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem('pacoca_current_user_v3', JSON.stringify(currentUser));
       saveRegisteredUser(currentUser);
       setAllLearners(getRegisteredUsers());
+      syncUserProfile(currentUser);
     } else {
       localStorage.removeItem('pacoca_current_user_v3');
     }
@@ -127,7 +129,45 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // Listen for live Supabase Google OAuth session
+  useEffect(() => {
+    if (!supabase) return;
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        const email = session.user.email || '';
+        const name =
+          session.user.user_metadata?.full_name ||
+          session.user.user_metadata?.name ||
+          email.split('@')[0];
+        const avatar =
+          session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture;
+        loginUser(email, name, avatar);
+      }
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        const email = session.user.email || '';
+        const name =
+          session.user.user_metadata?.full_name ||
+          session.user.user_metadata?.name ||
+          email.split('@')[0];
+        const avatar =
+          session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture;
+        loginUser(email, name, avatar);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
   const logout = () => {
+    signOutSupabase();
     setCurrentUser(null);
   };
 

@@ -1,10 +1,15 @@
-import React from 'react';
-import { Target, Gem, Flame, Mic, Sparkles } from 'lucide-react';
+import React, { useState } from 'react';
+import { Target, Gem, Flame, Mic, Sparkles, Check, Gift } from 'lucide-react';
 import { useUser } from '../context/UserContext';
 import { Mascot } from './Mascot';
+import { sound } from '../utils/audio';
 
 export const Quests: React.FC = () => {
   const { currentUser } = useUser();
+  const [claimedQuests, setClaimedQuests] = useState<string[]>(() => {
+    const saved = localStorage.getItem('pacoca_claimed_quests');
+    return saved ? JSON.parse(saved) : [];
+  });
 
   if (!currentUser) return null;
 
@@ -12,7 +17,7 @@ export const Quests: React.FC = () => {
     {
       id: 'q1',
       title: 'Ganhe 20 XP hoje',
-      desc: 'Complete lições para somar pontos.',
+      desc: 'Complete qualquer lição ou revisão para somar pontos.',
       current: Math.min(currentUser.xp, 20),
       total: 20,
       reward: 10,
@@ -21,8 +26,8 @@ export const Quests: React.FC = () => {
     },
     {
       id: 'q2',
-      title: 'Ofensiva do Casal',
-      desc: 'Você e seu amor praticando juntos hoje!',
+      title: 'Ofensiva Ativa de Hoje',
+      desc: 'Pratique hoje para manter sua ofensiva viva!',
       current: currentUser.completedToday ? 1 : 0,
       total: 1,
       reward: 20,
@@ -31,87 +36,133 @@ export const Quests: React.FC = () => {
     },
     {
       id: 'q3',
-      title: 'Pratique 1 Lição de Voz',
-      desc: 'Use o microfone para treinar sua pronúncia nativa.',
+      title: 'Treino de Pronúncia no Microfone',
+      desc: 'Complete 1 exercício de fala usando seu microfone.',
       current: currentUser.completedLessons.length > 0 ? 1 : 0,
       total: 1,
       reward: 15,
       icon: Mic,
       completed: currentUser.completedLessons.length > 0,
     },
+    {
+      id: 'q4',
+      title: 'Mestre da Unidade',
+      desc: 'Complete 3 lições da sua categoria atual.',
+      current: Math.min(currentUser.completedLessons.length, 3),
+      total: 3,
+      reward: 30,
+      icon: Target,
+      completed: currentUser.completedLessons.length >= 3,
+    },
   ];
+
+  const handleClaim = (questId: string) => {
+    sound.playVictory();
+    const updated = [...claimedQuests, questId];
+    setClaimedQuests(updated);
+    localStorage.setItem('pacoca_claimed_quests', JSON.stringify(updated));
+  };
+
+  const totalCompleted = quests.filter((q) => q.completed).length;
 
   return (
     <div className="max-w-2xl mx-auto space-y-6 pb-24">
-      {/* Quests Header */}
-      <div className="bg-linear-to-r from-sky-400 to-blue-600 rounded-3xl p-6 text-white shadow-lg flex items-center justify-between gap-4">
-        <div>
-          <span className="text-xs font-black uppercase tracking-wider text-sky-100 flex items-center gap-1 mb-1">
-            <Target className="w-4 h-4" /> Desafios Diários
+      {/* Quests Header with Paçoca Mascot */}
+      <div className="bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 rounded-3xl p-6 sm:p-7 text-white shadow-xl flex flex-col sm:flex-row items-center justify-between gap-6 border-b-6 border-b-blue-800">
+        <div className="space-y-1.5 text-center sm:text-left">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/20 rounded-full text-xs font-black uppercase tracking-wider">
+            <Target className="w-3.5 h-3.5 text-amber-300" /> Desafios Diários do Paçoca
           </span>
           <h2 className="font-fredoka text-2xl sm:text-3xl font-black">
             Metas do Dia
           </h2>
-          <p className="text-sky-100 text-xs sm:text-sm font-bold mt-1">
-            Ganhe gemas extras todos os dias cumprindo seus objetivos com o Paçoca!
+          <p className="text-sky-100 text-xs sm:text-sm font-medium max-w-sm">
+            Cumpra os objetivos com o Paçoca e resgate gemas extras para bater suas metas!
           </p>
+          <div className="pt-2">
+            <span className="px-3 py-1 bg-amber-400 text-slate-900 font-black text-xs rounded-xl shadow-xs">
+              {totalCompleted} de {quests.length} Desafios Cumpridos
+            </span>
+          </div>
         </div>
-        <Mascot mood="surprised" size="sm" interactive={false} />
+
+        <div className="shrink-0">
+          <Mascot mood="tip" size="md" interactive={true} />
+        </div>
       </div>
 
-      {/* Quest Cards */}
-      <div className="space-y-3">
+      {/* Quest Cards List */}
+      <div className="space-y-3.5">
         {quests.map((quest) => {
           const Icon = quest.icon;
           const percent = Math.min(100, Math.round((quest.current / quest.total) * 100));
+          const isClaimed = claimedQuests.includes(quest.id);
 
           return (
             <div
               key={quest.id}
-              className={`p-5 rounded-3xl border-2 transition-all ${
+              className={`p-5 rounded-3xl border-2 transition-all shadow-xs ${
                 quest.completed
-                  ? 'bg-emerald-50/60 border-emerald-200'
-                  : 'bg-white border-slate-200'
+                  ? 'bg-emerald-50/70 border-emerald-300 border-b-4 border-b-emerald-400'
+                  : 'bg-white border-slate-200 border-b-4 border-b-slate-300'
               }`}
             >
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5">
                   <div
-                    className={`w-10 h-10 rounded-2xl flex items-center justify-center ${
+                    className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border-2 shadow-2xs ${
                       quest.completed
-                        ? 'bg-emerald-100 text-emerald-600'
-                        : 'bg-sky-100 text-sky-600'
+                        ? 'bg-emerald-100 border-emerald-300 text-emerald-700'
+                        : 'bg-sky-100 border-sky-200 text-sky-700'
                     }`}
                   >
-                    <Icon className="w-5 h-5" />
+                    <Icon className="w-6 h-6" />
                   </div>
                   <div>
-                    <h4 className="font-extrabold text-slate-800 text-sm sm:text-base">
+                    <h4 className="font-black text-slate-800 text-base">
                       {quest.title}
                     </h4>
-                    <p className="text-xs text-slate-500 font-semibold">{quest.desc}</p>
+                    <p className="text-xs text-slate-500 font-medium">{quest.desc}</p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1 text-sky-600 font-black text-xs sm:text-sm bg-sky-50 px-2.5 py-1 rounded-xl border border-sky-200">
-                  <Gem className="w-4 h-4 fill-sky-500" />
-                  +{quest.reward}
+                {/* Progress & Reward Claim */}
+                <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                  <div className="flex items-center gap-1.5 bg-sky-50 px-3 py-1.5 rounded-xl border border-sky-200 text-sky-700 font-black text-xs">
+                    <Gem className="w-4 h-4 text-sky-500" />
+                    +{quest.reward} Gemas
+                  </div>
+
+                  {quest.completed ? (
+                    isClaimed ? (
+                      <span className="px-3 py-2 bg-emerald-100 text-emerald-800 rounded-xl font-black text-xs flex items-center gap-1">
+                        <Check className="w-4 h-4 stroke-[3]" /> Resgatado
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleClaim(quest.id)}
+                        className="px-4 py-2 bg-amber-400 hover:bg-amber-300 border-b-4 border-b-amber-600 text-slate-900 rounded-xl font-black text-xs uppercase tracking-wider cursor-pointer shadow-md active:scale-95 transition-all flex items-center gap-1.5"
+                      >
+                        <Gift className="w-4 h-4" /> Resgatar
+                      </button>
+                    )
+                  ) : (
+                    <span className="text-xs font-black text-slate-400 px-2">
+                      {quest.current}/{quest.total}
+                    </span>
+                  )}
                 </div>
               </div>
 
-              {/* Progress Bar */}
-              <div className="flex items-center gap-3">
-                <div className="flex-1 bg-slate-200 h-3 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-500 ${
-                      quest.completed ? 'bg-emerald-500' : 'bg-sky-500'
-                    }`}
-                    style={{ width: `${percent}%` }}
-                  />
-                </div>
-                <span className="text-xs font-black text-slate-500">
-                  {quest.current}/{quest.total}
-                </span>
+              {/* Progress bar inside card */}
+              <div className="mt-3.5 w-full bg-slate-200 h-2.5 rounded-full overflow-hidden p-0.5 border border-slate-300">
+                <div
+                  className={`h-full rounded-full transition-all duration-300 ${
+                    quest.completed ? 'bg-emerald-500' : 'bg-sky-500'
+                  }`}
+                  style={{ width: `${percent}%` }}
+                />
               </div>
             </div>
           );
