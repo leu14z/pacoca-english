@@ -1,17 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, Suspense, lazy } from 'react';
 import { UserProvider, useUser } from './context/UserContext';
 import { Header } from './components/Header';
 import { Navigation } from './components/Navigation';
 import type { TabType } from './components/Navigation';
 import { LearnPath } from './components/LearnPath';
-import { CoupleDashboard } from './components/CoupleDashboard';
-import { Leaderboard } from './components/Leaderboard';
-import { Quests } from './components/Quests';
-import { ProfileView } from './components/ProfileView';
-import { LessonModal } from './components/LessonModal';
 import { LoginScreen } from './components/LoginScreen';
-import { PlacementTestModal } from './components/PlacementTestModal';
 import type { Lesson } from './data/courses';
+
+// Code-split heavy modals and tabs for high FPS and instant load
+const LessonModal = lazy(() => import('./components/LessonModal').then((m) => ({ default: m.LessonModal })));
+const PlacementTestModal = lazy(() => import('./components/PlacementTestModal').then((m) => ({ default: m.PlacementTestModal })));
+const CoupleDashboard = lazy(() => import('./components/CoupleDashboard').then((m) => ({ default: m.CoupleDashboard })));
+const Leaderboard = lazy(() => import('./components/Leaderboard').then((m) => ({ default: m.Leaderboard })));
+const Quests = lazy(() => import('./components/Quests').then((m) => ({ default: m.Quests })));
+const ProfileView = lazy(() => import('./components/ProfileView').then((m) => ({ default: m.ProfileView })));
+
+const LoadingSpinner = () => (
+  <div className="flex items-center justify-center p-12">
+    <div className="w-8 h-8 border-4 border-sky-500 border-t-transparent rounded-full animate-spin" />
+  </div>
+);
 
 const MainApp: React.FC = () => {
   const { isAuthenticated, currentUser } = useUser();
@@ -34,34 +42,40 @@ const MainApp: React.FC = () => {
         <Header />
 
         <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-6">
-          {currentTab === 'learn' && (
-            <LearnPath
-              onStartLesson={(lesson) => setActiveLesson(lesson)}
-              onOpenPlacementTest={() => setShowPlacementModal(true)}
-            />
-          )}
+          <Suspense fallback={<LoadingSpinner />}>
+            {currentTab === 'learn' && (
+              <LearnPath
+                onStartLesson={(lesson) => setActiveLesson(lesson)}
+                onOpenPlacementTest={() => setShowPlacementModal(true)}
+              />
+            )}
 
-          {currentTab === 'couple' && <CoupleDashboard />}
+            {currentTab === 'couple' && <CoupleDashboard />}
 
-          {currentTab === 'leaderboard' && <Leaderboard />}
+            {currentTab === 'leaderboard' && <Leaderboard />}
 
-          {currentTab === 'quests' && <Quests />}
+            {currentTab === 'quests' && <Quests />}
 
-          {currentTab === 'profile' && <ProfileView />}
+            {currentTab === 'profile' && <ProfileView />}
+          </Suspense>
         </main>
       </div>
 
-      {/* Interactive Lesson Modal */}
+      {/* Interactive Lesson Modal (Lazy loaded) */}
       {activeLesson && (
-        <LessonModal
-          lesson={activeLesson}
-          onClose={() => setActiveLesson(null)}
-        />
+        <Suspense fallback={null}>
+          <LessonModal
+            lesson={activeLesson}
+            onClose={() => setActiveLesson(null)}
+          />
+        </Suspense>
       )}
 
-      {/* Placement Test (Nivelamento) Modal */}
+      {/* Placement Test (Nivelamento) Modal (Lazy loaded) */}
       {showPlacementModal && (
-        <PlacementTestModal onClose={() => setShowPlacementModal(false)} />
+        <Suspense fallback={null}>
+          <PlacementTestModal onClose={() => setShowPlacementModal(false)} />
+        </Suspense>
       )}
     </div>
   );

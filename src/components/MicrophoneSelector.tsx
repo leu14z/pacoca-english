@@ -18,52 +18,59 @@ export const MicrophoneSelector: React.FC<MicrophoneSelectorProps> = ({
     return localStorage.getItem('pacoca_preferred_mic') || 'default';
   });
   const [isOpen, setIsOpen] = useState(false);
-  const [audioLevel, setAudioLevel] = useState(0);
-  const [permissionGranted, setPermissionGranted] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const animFrameRef = useRef<number | null>(null);
+  const meterBarRef = useRef<HTMLDivElement | null>(null);
+  const lastUpdateRef = useRef<number>(0);
 
-  // Enumerate audio input devices
+  // Enumerate devices without locking audio stream
   const loadDevices = async () => {
     try {
       setErrorMsg('');
-      // Request temporary stream to unlock device labels if needed
-      const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      setPermissionGranted(true);
+      if (!navigator.mediaDevices?.enumerateDevices) {
+        setErrorMsg('Navegador não suporta busca de microfones.');
+        return;
+      }
 
-      const allDevices = await navigator.mediaDevices.enumerateDevices();
-      const audioInputs = allDevices
-        .filter((d) => d.kind === 'audioinput')
-        .map((d, index) => ({
-          deviceId: d.deviceId,
-          label: d.label || `Microfone ${index + 1}`,
-        }));
+      // Quick enumeration
+      let allDevices = await navigator.mediaDevices.enumerateDevices();
+      let audioInputs = allDevices.filter((d) => d.kind === 'audioinput');
 
-      setDevices(audioInputs);
+      // If labels are empty, request brief permission once
+      if (audioInputs.length > 0 && !audioInputs[0].label) {
+        try {
+          const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          tempStream.getTracks().forEach((t) => t.stop());
+          allDevices = await navigator.mediaDevices.enumerateDevices();
+          audioInputs = allDevices.filter((d) => d.kind === 'audioinput');
+        } catch {
+          // Ignore if user cancels
+        }
+      }
 
-      // Clean up temp stream
-      tempStream.getTracks().forEach((t) => t.stop());
+      const formatted = audioInputs.map((d, index) => ({
+        deviceId: d.deviceId,
+        label: d.label || `Microfone ${index + 1}`,
+      }));
 
-      // If no device was previously chosen or the chosen one is gone, select first
-      if (audioInputs.length > 0) {
-        const exists = audioInputs.some((d) => d.deviceId === selectedDeviceId);
-        const activeId = exists ? selectedDeviceId : audioInputs[0].deviceId;
+      setDevices(formatted);
+
+      if (formatted.length > 0) {
+        const exists = formatted.some((d) => d.deviceId === selectedDeviceId);
+        const activeId = exists ? selectedDeviceId : formatted[0].deviceId;
         setSelectedDeviceId(activeId);
         localStorage.setItem('pacoca_preferred_mic', activeId);
         if (onDeviceChange) onDeviceChange(activeId);
-        startVolumeMeter(activeId);
       }
     } catch (err: any) {
-      console.warn('Microphone permission or enumeration error:', err);
-      setPermissionGranted(false);
-      setErrorMsg('Permissão de microfone negada. Clique no cadeado na barra de endereços para permitir.');
+      setErrorMsg('Permissão de microfone negada ou indisponível.');
     }
   };
 
-  // Start live VU Volume Meter for chosen device
+  // Only start live audio visualizer when the test dropdown is OPEN
   const startVolumeMeter = async (deviceId: string) => {
     stopVolumeMeter();
 
@@ -81,29 +88,36 @@ export const MicrophoneSelector: React.FC<MicrophoneSelectorProps> = ({
 
       const source = audioCtx.createMediaStreamSource(stream);
       const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 256;
-      analyser.smoothingTimeConstant = 0.5;
+      analyser.fftSize = 64; // Low FFT size for extreme performance
       source.connect(analyser);
 
       const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
-      const updateLevel = () => {
-        analyser.getByteFrequencyData(dataArray);
-        let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) {
-          sum += dataArray[i];
+      const updateLevel = (timestamp: number) => {
+        // Throttle updates to ~20fps (every 50ms) to ensure ZERO page lag
+        if (timestamp - lastUpdateRef.current >= 50) {
+          lastUpdateRef.current = timestamp;
+          analyser.getByteFrequencyData(dataArray);
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) {
+            sum += dataArray[i];
+          }
+          const avg = sum / dataArray.length;
+          const percent = Math.min(100, Math.round((avg / 64) * 100));
+
+          // Direct DOM style update = ZERO React re-render overhead!
+          if (meterBarRef.current) {
+            meterBarRef.current.style.width = `${percent}%`;
+            meterBarRef.current.style.backgroundColor = percent > 60 ? '#10b981' : '#0284c7';
+          }
         }
-        const avg = sum / dataArray.length;
-        // Normalize to 0 - 100
-        const normalized = Math.min(100, Math.round((avg / 64) * 100));
-        setAudioLevel(normalized);
 
         animFrameRef.current = requestAnimationFrame(updateLevel);
       };
 
-      updateLevel();
-    } catch (err) {
-      console.warn('Could not start live volume meter for device:', err);
+      animFrameRef.current = requestAnimationFrame(updateLevel);
+    } catch {
+      // Audio stream failed or cancelled
     }
   };
 
@@ -122,7 +136,9 @@ export const MicrophoneSelector: React.FC<MicrophoneSelectorProps> = ({
       } catch {}
       audioContextRef.current = null;
     }
-    setAudioLevel(0);
+    if (meterBarRef.current) {
+      meterBarRef.current.style.width = '0%';
+    }
   };
 
   useEffect(() => {
@@ -131,6 +147,15 @@ export const MicrophoneSelector: React.FC<MicrophoneSelectorProps> = ({
       stopVolumeMeter();
     };
   }, []);
+
+  // When dropdown opens, start meter. When closed, stop meter immediately to save 100% CPU!
+  useEffect(() => {
+    if (isOpen) {
+      startVolumeMeter(selectedDeviceId);
+    } else {
+      stopVolumeMeter();
+    }
+  }, [isOpen, selectedDeviceId]);
 
   const handleSelectDevice = (deviceId: string) => {
     setSelectedDeviceId(deviceId);
@@ -154,49 +179,31 @@ export const MicrophoneSelector: React.FC<MicrophoneSelectorProps> = ({
           </div>
           <div className="min-w-0 text-left">
             <span className="text-[10px] font-black uppercase text-slate-400 block tracking-wider">
-              Dispositivo Selecionado:
+              Microfone Ativo:
             </span>
-            <p className="text-xs font-black text-slate-800 truncate" title={currentDeviceLabel}>
+            <p className="text-xs font-black text-slate-800 truncate max-w-[200px]" title={currentDeviceLabel}>
               {currentDeviceLabel}
             </p>
           </div>
         </div>
 
-        {/* Live Audio Level VU Meter */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-end gap-0.5 h-5 w-12 bg-slate-100 p-1 rounded-lg">
-            {[20, 40, 60, 80, 100].map((threshold, idx) => (
-              <div
-                key={idx}
-                className={`flex-1 rounded-xs transition-all duration-75 ${
-                  audioLevel >= threshold
-                    ? audioLevel > 75
-                      ? 'bg-emerald-500 h-full'
-                      : 'bg-sky-500 h-full'
-                    : 'bg-slate-300 h-1'
-                }`}
-              />
-            ))}
-          </div>
-
-          <button
-            type="button"
-            onClick={() => {
-              setIsOpen(!isOpen);
-              if (!permissionGranted) loadDevices();
-            }}
-            className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl cursor-pointer transition-colors"
-          >
-            {isOpen ? 'Fechar' : 'Trocar'}
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setIsOpen(!isOpen);
+            if (!isOpen && devices.length === 0) loadDevices();
+          }}
+          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl cursor-pointer transition-colors"
+        >
+          {isOpen ? 'Fechar' : 'Trocar / Testar'}
+        </button>
       </div>
 
-      {/* Dropdown / Device list */}
+      {/* Dropdown / Device list (Only runs VU meter when open) */}
       {isOpen && (
-        <div className="mt-2 p-3 bg-white border-2 border-slate-200 rounded-2xl shadow-lg space-y-2 text-left z-20">
+        <div className="mt-2 p-4 bg-white border-2 border-slate-200 rounded-2xl shadow-xl space-y-3 text-left z-20">
           <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-            <span className="text-xs font-black uppercase text-slate-600">
+            <span className="text-xs font-black uppercase text-slate-700">
               Escolha seu microfone:
             </span>
             <button
@@ -209,6 +216,21 @@ export const MicrophoneSelector: React.FC<MicrophoneSelectorProps> = ({
             </button>
           </div>
 
+          {/* Direct DOM Volume Meter Bar (0% React re-render lag) */}
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-[11px] font-bold text-slate-500">
+              <span>Teste de voz (fale agora):</span>
+              <span className="text-sky-600">Ao vivo</span>
+            </div>
+            <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden p-0.5 border border-slate-200">
+              <div
+                ref={meterBarRef}
+                className="h-full rounded-full transition-all duration-75"
+                style={{ width: '0%', backgroundColor: '#0284c7' }}
+              />
+            </div>
+          </div>
+
           {errorMsg && (
             <div className="p-2 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 font-bold flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
@@ -216,7 +238,7 @@ export const MicrophoneSelector: React.FC<MicrophoneSelectorProps> = ({
             </div>
           )}
 
-          <div className="max-h-48 overflow-y-auto space-y-1">
+          <div className="max-h-48 overflow-y-auto space-y-1 pt-1">
             {devices.map((device) => {
               const isSelected = device.deviceId === selectedDeviceId;
               return (
@@ -236,10 +258,6 @@ export const MicrophoneSelector: React.FC<MicrophoneSelectorProps> = ({
               );
             })}
           </div>
-
-          <p className="text-[10px] text-slate-400 font-medium pt-1">
-            Fale alto e observe as barrinhas verdes se movimentando para testar o som.
-          </p>
         </div>
       )}
     </div>
