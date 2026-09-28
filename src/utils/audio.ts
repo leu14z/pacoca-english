@@ -1,15 +1,46 @@
 // Web Audio API Sound Synthesizer & High-Fidelity Voice Engine for Paçoca English
+import audioManifest from '../data/audioManifest.json';
 
 class SoundController {
-  private ctx: AudioContext | null = null;
+  public ctx: AudioContext | null = null;
 
-  private initCtx() {
+  public initCtx() {
     if (!this.ctx && typeof window !== 'undefined') {
-      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      this.ctx = new AudioCtx();
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (AudioCtx) {
+        this.ctx = new AudioCtx();
+      }
     }
     if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume();
+      this.ctx.resume().catch(() => {});
+    }
+  }
+
+  /**
+   * Unlock Web Audio & Speech on mobile iOS / Android upon first tap
+   */
+  public unlockMobileAudio() {
+    this.initCtx();
+    if (this.ctx) {
+      try {
+        if (this.ctx.state === 'suspended') {
+          this.ctx.resume().catch(() => {});
+        }
+        // Play silent 1-sample buffer to unlock hardware audio routing
+        const buffer = this.ctx.createBuffer(1, 1, 22050);
+        const source = this.ctx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(this.ctx.destination);
+        source.start(0);
+      } catch {}
+    }
+
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      try {
+        window.speechSynthesis.resume();
+      } catch {}
     }
   }
 
@@ -114,6 +145,19 @@ class SoundController {
 
 export const sound = new SoundController();
 
+// Automatically listen for first user touch / click to unlock mobile audio pipeline
+if (typeof window !== 'undefined') {
+  const handleFirstInteraction = () => {
+    sound.unlockMobileAudio();
+    window.removeEventListener('touchstart', handleFirstInteraction);
+    window.removeEventListener('touchend', handleFirstInteraction);
+    window.removeEventListener('click', handleFirstInteraction);
+  };
+  window.addEventListener('touchstart', handleFirstInteraction, { passive: true });
+  window.addEventListener('touchend', handleFirstInteraction, { passive: true });
+  window.addEventListener('click', handleFirstInteraction, { passive: true });
+}
+
 // Voice Management & Preloading
 let cachedVoices: SpeechSynthesisVoice[] = [];
 
@@ -142,25 +186,26 @@ export function setSavedVoicePreference(style: PreferredVoiceStyle) {
 
 /**
  * Selects a high-quality human/natural voice.
- * BAN the ancient Microsoft David robot voice!
  */
 export function selectBestVoice(preference?: PreferredVoiceStyle): SpeechSynthesisVoice | null {
-  const voices = cachedVoices.length > 0 ? cachedVoices : (typeof window !== 'undefined' && 'speechSynthesis' in window ? window.speechSynthesis.getVoices() : []);
+  const voices =
+    cachedVoices.length > 0
+      ? cachedVoices
+      : typeof window !== 'undefined' && 'speechSynthesis' in window
+      ? window.speechSynthesis.getVoices()
+      : [];
   if (!voices || voices.length === 0) return null;
 
-  // Filter English voices only, AND BAN DAVID!
   const englishVoices = voices.filter(
     (v) => v.lang.startsWith('en') && !v.name.toLowerCase().includes('david')
   );
 
   if (englishVoices.length === 0) {
-    // If only David existed, pick any english voice as absolute last resort
     return voices.find((v) => v.lang.startsWith('en')) || null;
   }
 
   const pref = preference || getSavedVoicePreference();
 
-  // Option 1: Female Natural (Microsoft Zira or Google US English Female or Jenny)
   if (pref === 'female-natural') {
     const femaleVoice = englishVoices.find(
       (v) =>
@@ -173,48 +218,78 @@ export function selectBestVoice(preference?: PreferredVoiceStyle): SpeechSynthes
     if (femaleVoice) return femaleVoice;
   }
 
-  // Option 2: British English (Microsoft Daniel or George)
   if (pref === 'male-british') {
     const britishVoice = englishVoices.find(
-      (v) =>
-        v.name.includes('Daniel') ||
-        v.name.includes('George') ||
-        v.lang === 'en-GB'
+      (v) => v.name.includes('Daniel') || v.name.includes('George') || v.lang === 'en-GB'
     );
     if (britishVoice) return britishVoice;
   }
 
-  // Option 3: Google US English
   const googleVoice = englishVoices.find((v) => v.name.includes('Google'));
   if (googleVoice) return googleVoice;
 
-  // Option 4: Microsoft Zira (Female)
   const zira = englishVoices.find((v) => v.name.includes('Zira'));
   if (zira) return zira;
 
   return englishVoices[0];
 }
 
-import audioManifest from '../data/audioManifest.json';
-
 let currentAudio: HTMLAudioElement | null = null;
 
 function textToSlug(text: string): string {
   return text
     .toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '');
 }
 
 /**
+ * Helper to resolve audio file path properly on both localhost and subpath hosting (GitHub Pages)
+ */
+function resolveAudioUrl(filePath: string): string {
+  const clean = filePath.replace(/^\//, '');
+  const base = import.meta.env.BASE_URL || './';
+  const normalizedBase = base.endsWith('/') ? base : `${base}/`;
+  return `${normalizedBase}${clean}`;
+}
+
+/**
+ * Fallback SpeechSynthesis runner with mobile wake-up
+ */
+function fallbackSpeech(text: string, slow: boolean = false) {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+  try {
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.resume();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-US';
+    utterance.rate = slow ? 0.75 : 0.95;
+    utterance.pitch = 1.05;
+
+    const chosenVoice = selectBestVoice();
+    if (chosenVoice) {
+      utterance.voice = chosenVoice;
+    }
+    window.speechSynthesis.speak(utterance);
+  } catch (e) {
+    console.warn('Speech synthesis exception:', e);
+  }
+}
+
+/**
  * Speaks English phrase using Studio AI Neural Voice (Microsoft Edge Neural Aria/Jenny).
- * Falls back to browser synthesis if audio file is not available.
+ * Correctly resolves relative paths on GitHub Pages and unlocks mobile audio.
  */
 export function speakEnglish(text: string, slow: boolean = false) {
   if (typeof window === 'undefined') return;
 
-  // Stop any currently playing audio or speech
+  // Unlock mobile audio context
+  sound.unlockMobileAudio();
+
+  // Stop previous playback
   if (currentAudio) {
     try {
       currentAudio.pause();
@@ -230,30 +305,23 @@ export function speakEnglish(text: string, slow: boolean = false) {
   const slug = textToSlug(text);
 
   const manifestMap = audioManifest as Record<string, string>;
-  const audioUrl = manifestMap[cleanText] || manifestMap[slug] || `/audio/${slug}.mp3`;
+  const rawPath = manifestMap[cleanText] || manifestMap[slug];
 
-  // Try playing the authentic studio AI Neural MP3 first
-  const audio = new Audio(audioUrl);
-  audio.playbackRate = slow ? 0.75 : 1.0;
-  currentAudio = audio;
+  if (rawPath) {
+    const fullAudioUrl = resolveAudioUrl(rawPath);
+    const audio = new Audio(fullAudioUrl);
+    audio.playbackRate = slow ? 0.75 : 1.0;
+    currentAudio = audio;
 
-  const playPromise = audio.play();
-  if (playPromise !== undefined) {
-    playPromise.catch(() => {
-      // Audio file not found or couldn't play: Fallback to high-quality browser SpeechSynthesis
-      if ('speechSynthesis' in window) {
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'en-US';
-        utterance.rate = slow ? 0.75 : 0.95;
-        utterance.pitch = 1.05;
-
-        const chosenVoice = selectBestVoice();
-        if (chosenVoice) {
-          utterance.voice = chosenVoice;
-        }
-        window.speechSynthesis.speak(utterance);
-      }
-    });
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise.catch((err) => {
+        console.warn('Audio play error, falling back to speech synthesis:', err);
+        fallbackSpeech(text, slow);
+      });
+    }
+  } else {
+    // If not found in MP3 manifest, speak synchronously using browser synthesis
+    fallbackSpeech(text, slow);
   }
 }
-
