@@ -267,7 +267,7 @@ export const SpeechPractice: React.FC<SpeechPracticeProps> = ({
     // Set Active UI state
     setIsRecording(true);
     setRecordingSeconds(0);
-    setStatusMessage('🎙️ Gravando... Fale a frase agora!');
+    setStatusMessage('Gravando... Fale a frase agora!');
 
     // Start timer: automatically finishes at 8 seconds max
     let seconds = 0;
@@ -327,7 +327,7 @@ export const SpeechPractice: React.FC<SpeechPracticeProps> = ({
 
     // 1. Check if user stayed silent (Zero hearts lost!)
     if (peakVolume < 10 && !transcript) {
-      setStatusMessage('🔇 Não detectamos som da sua voz. Verifique o microfone ou fale um pouco mais alto.');
+      setStatusMessage('Não detectamos som da sua voz. Verifique o microfone ou fale um pouco mais alto.');
       return;
     }
 
@@ -335,7 +335,7 @@ export const SpeechPractice: React.FC<SpeechPracticeProps> = ({
     if (transcript) {
       const evaluation = validatePronunciation(expectedPhrase, transcript, 75);
       if (evaluation.isMatch) {
-        setStatusMessage(`🎉 Pronúncia excelente! (${evaluation.score}% de precisão)`);
+        setStatusMessage(`Pronúncia excelente! (${evaluation.score}% de precisão)`);
         setEvaluationFeedback(null);
         onSuccess(evaluation.score);
       } else {
@@ -350,7 +350,7 @@ export const SpeechPractice: React.FC<SpeechPracticeProps> = ({
     // but the local microphone clearly recorded the user's speech!
     if (vocalRatio >= 0.15 || peakVolume >= 25) {
       const estimatedScore = Math.min(95, 80 + Math.round(peakVolume * 0.15));
-      setStatusMessage(`🎙️ Áudio captado com sucesso pelo seu microfone! (${estimatedScore}% de clareza vocal)`);
+      setStatusMessage(`Áudio captado com sucesso pelo seu microfone! (${estimatedScore}% de clareza vocal)`);
       setEvaluationFeedback(null);
       onSuccess(estimatedScore);
     } else {
@@ -420,8 +420,8 @@ export const SpeechPractice: React.FC<SpeechPracticeProps> = ({
 
             {/* Timer and Instructions */}
             <div className="space-y-1">
-              <span className="text-rose-600 font-black text-xs uppercase tracking-wider block">
-                🎙️ Gravando... ({recordingSeconds}s / 8s)
+              <span className="text-rose-600 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1">
+                <Mic className="w-3.5 h-3.5" /> Gravando... ({recordingSeconds}s / 8s)
               </span>
               <span className="text-slate-500 font-bold text-xs block">
                 Fale agora e toque no quadrado vermelho quando terminar!

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CheckCircle2, ArrowRight, Volume2, Award, Compass } from 'lucide-react';
+import { CheckCircle2, ArrowRight, Volume2, Award, Compass, Lightbulb } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { sound, speakEnglish } from '../utils/audio';
 import { useUser } from '../context/UserContext';
@@ -309,8 +309,12 @@ export const PlacementTestModal: React.FC<PlacementTestModalProps> = ({ onClose 
 
             {/* Explanation box after answer */}
             {isAnswered && (
-              <div className="p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl text-xs font-bold text-slate-700">
-                💡 <span className="font-black text-slate-800">Explicação:</span> {currentQ.explanation}
+              <div className="p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl text-xs font-bold text-slate-700 flex items-start gap-2">
+                <Lightbulb className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-black text-slate-800">Explicação: </span>
+                  {currentQ.explanation}
+                </div>
               </div>
             )}
           </div>
@@ -356,7 +360,7 @@ export const PlacementTestModal: React.FC<PlacementTestModalProps> = ({ onClose 
                 onClick={onClose}
                 className="flex-1 py-4 bg-emerald-500 hover:bg-emerald-600 active:translate-y-0.5 border-b-4 border-b-emerald-700 text-white font-black rounded-2xl cursor-pointer text-base shadow-lg transition-all"
               >
-                Bora Aprender! 🚀
+                Começar a Aprender Agora
               </button>
             </div>
           </div>

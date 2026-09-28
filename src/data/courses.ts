@@ -61,7 +61,7 @@ export const COURSE_UNITS: Unit[] = [
     "title": "Unidade 1: Primeiras Palavras & Educação Básica",
     "subtitle": "Sim, não, por favor, obrigado e os cumprimentos essenciais.",
     "color": "emerald",
-    "icon": "👋",
+    "icon": "sparkles",
     "lessons": [
       {
         "id": "lesson-1-1",
@@ -290,7 +290,7 @@ export const COURSE_UNITS: Unit[] = [
     "title": "Unidade 2: Apresentação Pessoal & Família",
     "subtitle": "Diga seu nome e fale sobre seus pais, parceiro(a) e amigos.",
     "color": "sky",
-    "icon": "👨‍👩‍👦",
+    "icon": "users",
     "lessons": [
       {
         "id": "lesson-2-1",
@@ -499,7 +499,7 @@ export const COURSE_UNITS: Unit[] = [
     "title": "Unidade 3: Números, Horas & Dias da Semana",
     "subtitle": "Conte de 1 a 10, pergunte as horas e conheça os dias da semana.",
     "color": "amber",
-    "icon": "🔢",
+    "icon": "clock",
     "lessons": [
       {
         "id": "lesson-3-a1-1",
@@ -686,7 +686,7 @@ export const COURSE_UNITS: Unit[] = [
     "title": "Unidade 4: Na Casa, Cores & Roupas",
     "subtitle": "Itens pessoais (chave, celular, carteira) e cores do dia a dia.",
     "color": "purple",
-    "icon": "🏠",
+    "icon": "home",
     "lessons": [
       {
         "id": "lesson-4-a1-1",
@@ -875,7 +875,7 @@ export const COURSE_UNITS: Unit[] = [
     "title": "Unidade 5: Restaurante, Café & Supermercado",
     "subtitle": "Faça pedidos com elegância, converse com o garçom e peça a conta.",
     "color": "rose",
-    "icon": "🍽️",
+    "icon": "utensils",
     "lessons": [
       {
         "id": "lesson-5-a2-1",
@@ -1059,7 +1059,7 @@ export const COURSE_UNITS: Unit[] = [
     "title": "Unidade 6: Viagens, Aeroporto & Imigração",
     "subtitle": "Passaporte, portão de embarque e respostas calmas na imigração.",
     "color": "amber",
-    "icon": "✈️",
+    "icon": "plane",
     "lessons": [
       {
         "id": "lesson-6-a2-1",
@@ -1236,7 +1236,7 @@ export const COURSE_UNITS: Unit[] = [
     "title": "Unidade 7: Hotel, Hospedagem & Wi-Fi",
     "subtitle": "Check-in, senha do Wi-Fi, toalhas extras e check-out tranquilo.",
     "color": "sky",
-    "icon": "🏨",
+    "icon": "hotel",
     "lessons": [
       {
         "id": "lesson-7-a2-1",
@@ -1418,7 +1418,7 @@ export const COURSE_UNITS: Unit[] = [
     "title": "Unidade 8: Pela Cidade, Direções & Farmácia",
     "subtitle": "Onde fica o banheiro? Vire à direita, farmácia e remédios.",
     "color": "teal",
-    "icon": "🗺️",
+    "icon": "map-pin",
     "lessons": [
       {
         "id": "lesson-8-a2-1",
@@ -1598,7 +1598,7 @@ export const COURSE_UNITS: Unit[] = [
     "title": "Unidade 9: No Trabalho, Reuniões & E-mails",
     "subtitle": "Comunique-se em reuniões, agende compromissos e colabore profissionalmente.",
     "color": "indigo",
-    "icon": "💼",
+    "icon": "briefcase",
     "lessons": [
       {
         "id": "lesson-9-b1-1",
@@ -1784,7 +1784,7 @@ export const COURSE_UNITS: Unit[] = [
     "title": "Unidade 10: Expressões Nativas & Gírias Reais",
     "subtitle": "Idioms e gírias do dia a dia para soar natural como um nativo.",
     "color": "rose",
-    "icon": "💬",
+    "icon": "message-square",
     "lessons": [
       {
         "id": "lesson-10-b1-1",
@@ -1966,7 +1966,7 @@ export const COURSE_UNITS: Unit[] = [
     "title": "Unidade 11: Opiniões, Debates & Argumentação",
     "subtitle": "Concordar, discordar com elegância e defender seu ponto de vista.",
     "color": "emerald",
-    "icon": "💡",
+    "icon": "lightbulb",
     "lessons": [
       {
         "id": "lesson-11-b1-1",
@@ -2133,7 +2133,7 @@ export const COURSE_UNITS: Unit[] = [
     "title": "Unidade 12: Conversação Social & Conexões Reais",
     "subtitle": "Small talk, hobbies, falar sobre o futuro e fazer amizades.",
     "color": "purple",
-    "icon": "☕",
+    "icon": "coffee",
     "lessons": [
       {
         "id": "lesson-12-b1-1",

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Volume2, Snail, CheckCircle2, XCircle, Heart, RotateCcw } from 'lucide-react';
+import { X, Volume2, Snail, CheckCircle2, XCircle, Heart, RotateCcw, Blocks, Headphones, CheckSquare, Link2, Mic, MessageCircle } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { motion } from 'framer-motion';
 import type { Lesson, Exercise } from '../data/courses';
@@ -338,13 +338,37 @@ export const LessonModal: React.FC<LessonModalProps> = ({ lesson, onClose }) => 
       <div className="flex-1 max-w-2xl w-full mx-auto px-4 py-4 sm:py-6 overflow-y-auto flex flex-col justify-center">
         {/* Activity Category Tag */}
         <div className="flex items-center gap-2 mb-3">
-          <span className="px-3 py-1 bg-sky-100 text-sky-800 rounded-full font-black text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-2xs">
-            {currentExercise.type === 'word-bank' && '🧩 Monte a Frase'}
-            {currentExercise.type === 'listen-bank' && '🎧 Audição & Montagem'}
-            {currentExercise.type === 'multiple-choice' && '📝 Escolha a Opção'}
-            {currentExercise.type === 'match-pairs' && '🔗 Conecte os Pares'}
-            {currentExercise.type === 'speech' && '🗣️ Treino de Fala'}
-            {currentExercise.type === 'dialogue' && '💬 Conversação Real'}
+          <span className="px-3.5 py-1.5 bg-sky-50 text-sky-800 border border-sky-200 rounded-full font-black text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-2xs">
+            {currentExercise.type === 'word-bank' && (
+              <>
+                <Blocks className="w-4 h-4 text-sky-600" /> Monte a Frase
+              </>
+            )}
+            {currentExercise.type === 'listen-bank' && (
+              <>
+                <Headphones className="w-4 h-4 text-sky-600" /> Audição & Montagem
+              </>
+            )}
+            {currentExercise.type === 'multiple-choice' && (
+              <>
+                <CheckSquare className="w-4 h-4 text-sky-600" /> Escolha a Opção
+              </>
+            )}
+            {currentExercise.type === 'match-pairs' && (
+              <>
+                <Link2 className="w-4 h-4 text-sky-600" /> Conecte os Pares
+              </>
+            )}
+            {currentExercise.type === 'speech' && (
+              <>
+                <Mic className="w-4 h-4 text-sky-600" /> Treino de Fala
+              </>
+            )}
+            {currentExercise.type === 'dialogue' && (
+              <>
+                <MessageCircle className="w-4 h-4 text-sky-600" /> Conversação Real
+              </>
+            )}
           </span>
         </div>
 
