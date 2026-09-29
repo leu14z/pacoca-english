@@ -34,10 +34,10 @@ export const CoupleDashboard: React.FC = () => {
     setTimeout(() => setCodeCopied(false), 2500);
   };
 
-  const handleLinkPartner = (e: React.FormEvent) => {
+  const handleLinkPartner = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!partnerCodeInput.trim()) return;
-    const res = linkPartnerCode(partnerCodeInput);
+    const res = await linkPartnerCode(partnerCodeInput);
     if (res.success) {
       sound.playSuccess();
       setFeedback({ type: 'success', message: res.message });

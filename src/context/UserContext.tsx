@@ -26,11 +26,12 @@ interface UserContextType {
   coupleStats: CoupleStats;
   loginUser: (email: string, name: string, avatar?: string, id?: string) => void;
   logout: () => void;
-  linkPartnerCode: (codeOrEmail: string) => { success: boolean; message: string };
+  linkPartnerCode: (codeOrEmail: string) => Promise<{ success: boolean; message: string }>;
   unlinkPartner: () => void;
   completeLesson: (lessonId: string, xpGained: number) => void;
   loseHeart: () => void;
   refillHearts: () => boolean;
+  addDiamonds: (amount: number) => void;
   sendCoupleNudge: (message: string) => void;
   clearNudge: () => void;
   updateUserName: (newName: string) => void;
@@ -56,7 +57,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         if (parsed?.id) {
           const cleanIdPart = parsed.id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase();
-          parsed.coupleCode = parsed.coupleCode || `PACOCA-${cleanIdPart || '7777'}`;
+          parsed.coupleCode = `PACOCA-${cleanIdPart || '7777'}`;
         }
         localStorage.setItem('pacoca_current_user_v3', JSON.stringify(parsed));
         return parsed;
@@ -200,6 +201,58 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   }, [currentUser?.partnerCode, currentUser?.id, currentUser?.email, allLearners]);
 
+  // If partner is configured but not yet in allLearners, fetch directly from Supabase
+  useEffect(() => {
+    if (!currentUser?.partnerCode || partner || !supabase) return;
+    const target = currentUser.partnerCode.trim().toLowerCase();
+
+    (async () => {
+      try {
+        let remote: AuthUserProfile | null = null;
+        if (target.includes('@')) {
+          remote = await fetchUserProfileByEmail(target);
+        } else {
+          const prefix = target.replace('pacoca-', '').replace(/[^a-z0-9]/g, '');
+          if (prefix.length >= 3) {
+            const { data } = await supabase
+              .from('profiles')
+              .select('*')
+              .ilike('id', `${prefix}%`)
+              .maybeSingle();
+
+            if (data) {
+              const today = getTodayString();
+              const cleanIdPart = (data.id || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase();
+              remote = {
+                id: data.id,
+                name: data.full_name || 'Aluno',
+                email: data.email,
+                avatar: data.avatar_url || './mascot/mascoteoficial.png',
+                xp: data.total_xp ?? 0,
+                hearts: data.hearts ?? 5,
+                maxHearts: 5,
+                diamonds: 100,
+                streak: data.streak_count ?? 0,
+                lastActiveDate: data.last_activity_date || '',
+                completedLessons: [],
+                completedToday: data.last_activity_date === today,
+                level: data.level || 'A1',
+                placementCompleted: data.placement_completed || false,
+                coupleCode: `PACOCA-${cleanIdPart || '7777'}`,
+              };
+            }
+          }
+        }
+
+        if (remote && remote.email.toLowerCase() !== currentUser.email.toLowerCase()) {
+          setAllLearners((prev) => [remote!, ...prev.filter((p) => p.id !== remote!.id)]);
+        }
+      } catch (err) {
+        console.warn('Erro ao restaurar perfil do parceiro:', err);
+      }
+    })();
+  }, [currentUser?.partnerCode, partner, currentUser?.email]);
+
   // Login or Register a user (preserves stats across devices if found in Supabase)
   const loginUser = async (email: string, name: string, avatar?: string, id?: string) => {
     const cleanEmail = email.trim().toLowerCase();
@@ -307,7 +360,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCurrentUser(null);
   };
 
-  const linkPartnerCode = (codeOrEmail: string): { success: boolean; message: string } => {
+  const linkPartnerCode = async (codeOrEmail: string): Promise<{ success: boolean; message: string }> => {
     const clean = codeOrEmail.trim().toLowerCase();
     if (!clean || !currentUser) {
       return { success: false, message: 'Digite um código ou e-mail válido.' };
@@ -317,15 +370,62 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, message: 'Você não pode vincular seu próprio código a você mesmo!' };
     }
 
-    // Try to find the partner in allLearners
-    const matched = allLearners.find((u) => {
+    // 1. Try to find the partner in allLearners
+    let matched = allLearners.find((u) => {
       if (u.id === currentUser.id || u.email.toLowerCase() === currentUser.email.toLowerCase()) return false;
       const uCode = (u.coupleCode || `PACOCA-${u.id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase()}`).toLowerCase();
       if (uCode === clean || uCode.replace('pacoca-', '') === clean.replace('pacoca-', '')) return true;
       if (u.email.toLowerCase() === clean) return true;
-      if (u.name.toLowerCase() === clean) return true;
+      if (u.name.toLowerCase().includes(clean)) return true;
       return false;
     });
+
+    // 2. If not found in allLearners, query Supabase directly by email or ID prefix
+    if (!matched && supabase) {
+      try {
+        if (clean.includes('@')) {
+          const remote = await fetchUserProfileByEmail(clean);
+          if (remote && remote.email.toLowerCase() !== currentUser.email.toLowerCase()) {
+            matched = remote;
+            setAllLearners((prev) => [remote, ...prev.filter((p) => p.id !== remote.id)]);
+          }
+        } else {
+          const prefix = clean.replace('pacoca-', '').replace(/[^a-z0-9]/g, '');
+          if (prefix.length >= 3) {
+            const { data } = await supabase
+              .from('profiles')
+              .select('*')
+              .ilike('id', `${prefix}%`)
+              .maybeSingle();
+
+            if (data && data.email.toLowerCase() !== currentUser.email.toLowerCase()) {
+              const today = getTodayString();
+              const cleanIdPart = (data.id || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase();
+              matched = {
+                id: data.id,
+                name: data.full_name || 'Aluno',
+                email: data.email,
+                avatar: data.avatar_url || './mascot/mascoteoficial.png',
+                xp: data.total_xp ?? 0,
+                hearts: data.hearts ?? 5,
+                maxHearts: 5,
+                diamonds: 100,
+                streak: data.streak_count ?? 0,
+                lastActiveDate: data.last_activity_date || '',
+                completedLessons: [],
+                completedToday: data.last_activity_date === today,
+                level: data.level || 'A1',
+                placementCompleted: data.placement_completed || false,
+                coupleCode: `PACOCA-${cleanIdPart || '7777'}`,
+              };
+              setAllLearners((prev) => [matched!, ...prev.filter((p) => p.id !== matched!.id)]);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Erro ao buscar parceiro no Supabase:', err);
+      }
+    }
 
     if (!matched) {
       return {
@@ -405,6 +505,16 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCurrentUser(updated);
     saveRegisteredUser(updated);
     return true;
+  };
+
+  const addDiamonds = (amount: number) => {
+    if (!currentUser || amount <= 0) return;
+    const updated: AuthUserProfile = {
+      ...currentUser,
+      diamonds: (currentUser.diamonds || 0) + amount,
+    };
+    setCurrentUser(updated);
+    saveRegisteredUser(updated);
   };
 
   // Real-time listener for romantic love nudges across devices
@@ -537,6 +647,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         completeLesson,
         loseHeart,
         refillHearts,
+        addDiamonds,
         sendCoupleNudge,
         clearNudge,
         updateUserName,

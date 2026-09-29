@@ -1,15 +1,43 @@
-import React, { useState } from 'react';
-import { Target, Gem, Flame, Mic, Sparkles, Check, Gift } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Target, Gem, Flame, Mic, Sparkles, Check, Gift, Clock } from 'lucide-react';
 import { useUser } from '../context/UserContext';
 import { Mascot } from './Mascot';
 import { sound } from '../utils/audio';
 
+const getTodayString = () => new Date().toISOString().split('T')[0];
+
+const getTimeUntilMidnight = () => {
+  const now = new Date();
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const diffMs = Math.max(0, tomorrow.getTime() - now.getTime());
+  const hours = Math.floor(diffMs / (1000 * 60 * 60));
+  const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+  const seconds = Math.floor((diffMs % (1000 * 60)) / 1000);
+  return `${String(hours).padStart(2, '0')}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
+};
+
 export const Quests: React.FC = () => {
-  const { currentUser } = useUser();
+  const { currentUser, addDiamonds } = useUser();
+  const [currentDate, setCurrentDate] = useState<string>(getTodayString);
+  const [timeLeft, setTimeLeft] = useState<string>(getTimeUntilMidnight);
   const [claimedQuests, setClaimedQuests] = useState<string[]>(() => {
-    const saved = localStorage.getItem('pacoca_claimed_quests');
+    const today = getTodayString();
+    const saved = localStorage.getItem(`pacoca_claimed_quests_${today}`);
     return saved ? JSON.parse(saved) : [];
   });
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTimeLeft(getTimeUntilMidnight());
+      const nowDay = getTodayString();
+      if (nowDay !== currentDate) {
+        setCurrentDate(nowDay);
+        const saved = localStorage.getItem(`pacoca_claimed_quests_${nowDay}`);
+        setClaimedQuests(saved ? JSON.parse(saved) : []);
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [currentDate]);
 
   if (!currentUser) return null;
 
@@ -56,11 +84,13 @@ export const Quests: React.FC = () => {
     },
   ];
 
-  const handleClaim = (questId: string) => {
+  const handleClaim = (questId: string, reward: number) => {
     sound.playVictory();
+    addDiamonds(reward);
+    const today = getTodayString();
     const updated = [...claimedQuests, questId];
     setClaimedQuests(updated);
-    localStorage.setItem('pacoca_claimed_quests', JSON.stringify(updated));
+    localStorage.setItem(`pacoca_claimed_quests_${today}`, JSON.stringify(updated));
   };
 
   const totalCompleted = quests.filter((q) => q.completed).length;
@@ -79,9 +109,13 @@ export const Quests: React.FC = () => {
           <p className="text-sky-100 text-xs sm:text-sm font-medium max-w-sm">
             Cumpra os objetivos com o Paçoca e resgate gemas extras para bater suas metas!
           </p>
-          <div className="pt-2">
+          <div className="pt-2 flex flex-wrap items-center gap-2">
             <span className="px-3 py-1 bg-amber-400 text-slate-900 font-black text-xs rounded-xl shadow-xs">
               {totalCompleted} de {quests.length} Desafios Cumpridos
+            </span>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/20 text-white font-black text-xs rounded-xl backdrop-blur-xs">
+              <Clock className="w-3.5 h-3.5 text-amber-300" />
+              Reseta em: <span className="font-mono text-amber-300">{timeLeft}</span>
             </span>
           </div>
         </div>
@@ -141,7 +175,7 @@ export const Quests: React.FC = () => {
                     ) : (
                       <button
                         type="button"
-                        onClick={() => handleClaim(quest.id)}
+                        onClick={() => handleClaim(quest.id, quest.reward)}
                         className="px-4 py-2 bg-amber-400 hover:bg-amber-300 border-b-4 border-b-amber-600 text-slate-900 rounded-xl font-black text-xs uppercase tracking-wider cursor-pointer shadow-md active:scale-95 transition-all flex items-center gap-1.5"
                       >
                         <Gift className="w-4 h-4" /> Resgatar
