@@ -1,4 +1,13 @@
-// Google Authentication & User Registry Service
+export interface CoupleInvite {
+  id: string;
+  fromEmail: string;
+  fromName: string;
+  fromAvatar?: string;
+  fromCode: string;
+  toEmail: string;
+  createdAt: number;
+  status: 'pending' | 'accepted' | 'declined';
+}
 
 export interface AuthUserProfile {
   id: string;
@@ -15,6 +24,8 @@ export interface AuthUserProfile {
   completedToday: boolean;
   coupleCode?: string;
   partnerCode?: string;
+  incomingInvites?: CoupleInvite[];
+  sentInvite?: CoupleInvite | null;
   level?: 'A1' | 'A2' | 'B1';
   placementCompleted?: boolean;
 }

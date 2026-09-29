@@ -1,15 +1,27 @@
 import React, { useState } from 'react';
-import { Heart, Send, CheckCircle2, MessageSquareHeart, Copy, Link2, Check, Flame, Unlink, AlertCircle } from 'lucide-react';
+import { Heart, Send, CheckCircle2, MessageSquareHeart, Copy, Link2, Check, Flame, Unlink, AlertCircle, Mail } from 'lucide-react';
 import { useUser } from '../context/UserContext';
 import { Mascot } from './Mascot';
 import { sound } from '../utils/audio';
+import { MailboxModal } from './MailboxModal';
 
 export const CoupleDashboard: React.FC = () => {
-  const { currentUser, partner, coupleStats, sendCoupleNudge, clearNudge, linkPartnerCode, unlinkPartner } = useUser();
+  const {
+    currentUser,
+    partner,
+    coupleStats,
+    sendCoupleNudge,
+    clearNudge,
+    linkPartnerCode,
+    unlinkPartner,
+    incomingInvites,
+    acceptCoupleInvite,
+  } = useUser();
   const [partnerCodeInput, setPartnerCodeInput] = useState('');
   const [codeCopied, setCodeCopied] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [nudgeSent, setNudgeSent] = useState(false);
+  const [showMailbox, setShowMailbox] = useState(false);
 
   if (!currentUser) return null;
 
@@ -86,6 +98,44 @@ export const CoupleDashboard: React.FC = () => {
           >
             Fechar
           </button>
+        </div>
+      )}
+
+      {/* Pending Incoming Invites Banner */}
+      {incomingInvites.length > 0 && !partner && (
+        <div className="p-4 bg-gradient-to-r from-amber-100 via-orange-100 to-pink-100 border-2 border-amber-300 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-md animate-in fade-in">
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <div className="w-11 h-11 rounded-2xl bg-amber-400 text-slate-900 flex items-center justify-center shrink-0 shadow-xs">
+              <Mail className="w-6 h-6" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <span className="text-[11px] font-black text-amber-800 uppercase tracking-wider block">
+                📬 Novo Convite no Correio!
+              </span>
+              <p className="font-extrabold text-slate-800 text-sm truncate">
+                <strong className="text-rose-600">{incomingInvites[0].fromName}</strong> quer ser seu par de estudos!
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0">
+            <button
+              type="button"
+              onClick={async () => {
+                const res = await acceptCoupleInvite(incomingInvites[0]);
+                if (res.success) setFeedback({ type: 'success', message: res.message });
+              }}
+              className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 border-b-4 border-b-emerald-700 text-white rounded-xl font-black text-xs uppercase tracking-wider cursor-pointer shadow-xs active:scale-95 transition-all flex items-center gap-1.5"
+            >
+              <Check className="w-4 h-4 stroke-[3]" /> Aceitar
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowMailbox(true)}
+              className="px-3 py-2 bg-white hover:bg-amber-50 text-slate-700 rounded-xl font-black text-xs border border-amber-300 cursor-pointer shadow-xs active:scale-95"
+            >
+              Ver Correio
+            </button>
+          </div>
         </div>
       )}
 
@@ -213,9 +263,23 @@ export const CoupleDashboard: React.FC = () => {
             </div>
           ) : (
             <div className="space-y-3">
-              <p className="text-xs text-slate-500 font-medium">
-                Conecte o código ou e-mail do seu amor para sincronizar as ofensivas e mensagens!
-              </p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-slate-500 font-medium">
+                  Conecte o código ou e-mail do seu amor para sincronizar:
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowMailbox(true)}
+                  className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-black border border-rose-200 flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 shrink-0"
+                >
+                  <Mail className="w-3.5 h-3.5" /> Correio
+                  {incomingInvites.length > 0 && (
+                    <span className="w-4 h-4 bg-rose-500 text-white rounded-full text-[9px] font-black flex items-center justify-center">
+                      {incomingInvites.length}
+                    </span>
+                  )}
+                </button>
+              </div>
               <form onSubmit={handleLinkPartner} className="flex gap-2">
                 <input
                   type="text"
@@ -314,6 +378,12 @@ export const CoupleDashboard: React.FC = () => {
           ))}
         </div>
       </div>
+
+      {/* Mailbox Modal */}
+      <MailboxModal
+        isOpen={showMailbox}
+        onClose={() => setShowMailbox(false)}
+      />
     </div>
   );
 };

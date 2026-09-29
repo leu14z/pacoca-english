@@ -1,14 +1,18 @@
 import React, { useState } from 'react';
-import { Flame, Gem, Heart } from 'lucide-react';
+import { Flame, Gem, Heart, Mail } from 'lucide-react';
 import { useUser } from '../context/UserContext';
 import { sound } from '../utils/audio';
+import { MailboxModal } from './MailboxModal';
 
 export const Header: React.FC = () => {
-  const { currentUser, refillHearts } = useUser();
+  const { currentUser, refillHearts, incomingInvites } = useUser();
   const [showHeartModal, setShowHeartModal] = useState(false);
+  const [showMailboxModal, setShowMailboxModal] = useState(false);
   const [refillError, setRefillError] = useState(false);
 
   if (!currentUser) return null;
+
+  const pendingInvitesCount = (incomingInvites || []).length;
 
   const handleRefill = () => {
     const success = refillHearts();
@@ -56,8 +60,8 @@ export const Header: React.FC = () => {
             </span>
           </div>
 
-          {/* Right Gamification Stats: Streak, Gems, Hearts & Profile Avatar */}
-          <div className="flex items-center gap-2 sm:gap-4">
+          {/* Right Gamification Stats: Streak, Gems, Hearts, Mailbox & Profile Avatar */}
+          <div className="flex items-center gap-2 sm:gap-3.5">
             {/* Streak Flame */}
             <div
               className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-2xl font-black text-sm transition-all select-none ${
@@ -90,14 +94,32 @@ export const Header: React.FC = () => {
               <span>{currentUser.diamonds}</span>
             </div>
 
-            {/* Hearts */}
+            {/* Hearts (10 Vidas) */}
             <button
               onClick={() => setShowHeartModal(true)}
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-2xl font-black text-sm text-rose-500 hover:bg-rose-50 transition-colors cursor-pointer select-none"
-              title="Vidas restantes. Clique para recarregar!"
+              title="Vidas restantes (até 10). Clique para recarregar!"
             >
               <Heart className="w-5 h-5 fill-rose-500 text-rose-500" />
               <span>{currentUser.hearts}</span>
+            </button>
+
+            {/* Mailbox / Correio Button */}
+            <button
+              type="button"
+              onClick={() => {
+                sound.playClick();
+                setShowMailboxModal(true);
+              }}
+              className="relative p-2 rounded-2xl bg-slate-100 hover:bg-rose-50 border border-slate-200 hover:border-rose-300 text-slate-600 hover:text-rose-500 cursor-pointer transition-all active:scale-95 shrink-0"
+              title="Correio: Convites de Casal"
+            >
+              <Mail className="w-5 h-5" />
+              {pendingInvitesCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white rounded-full text-[10px] font-black flex items-center justify-center animate-bounce shadow-xs">
+                  {pendingInvitesCount}
+                </span>
+              )}
             </button>
 
             {/* User Profile Avatar (Sleek circular badge on far right) */}
@@ -121,19 +143,19 @@ export const Header: React.FC = () => {
           <div className="bg-white border-2 border-slate-200 rounded-3xl p-6 max-w-sm w-full shadow-2xl text-center relative">
             <div className="w-20 h-20 mx-auto mb-3">
               <img
-                src={currentUser.hearts <= 1 ? './mascot/assustado.png' : './mascot/certinho.png'}
+                src={currentUser.hearts <= 2 ? './mascot/assustado.png' : './mascot/certinho.png'}
                 alt="Paçoca"
                 className="w-full h-full object-contain"
               />
             </div>
 
             <h3 className="font-fredoka text-2xl text-slate-800 mb-1">
-              {currentUser.hearts === 5 ? 'Vidas Cheias!' : 'Recarregar Vidas'}
+              {currentUser.hearts >= 10 ? 'Vidas Cheias!' : 'Recarregar Vidas'}
             </h3>
             <p className="text-slate-600 text-sm font-semibold mb-6">
-              {currentUser.hearts === 5
-                ? 'Você já está com as 5 vidas completas! Continue praticando para acumular XP.'
-                : 'Você precisa de vidas para praticar lições. Recarregue agora com suas gemas!'}
+              {currentUser.hearts >= 10
+                ? 'Você já está com as 10 vidas completas! Continue praticando para acumular XP.'
+                : `Você tem ${currentUser.hearts} de 10 vidas. Recarregue agora com suas gemas para continuar praticando!`}
             </p>
 
             {refillError && (
@@ -143,13 +165,13 @@ export const Header: React.FC = () => {
             )}
 
             <div className="space-y-3">
-              {currentUser.hearts < 5 && (
+              {currentUser.hearts < 10 && (
                 <button
                   onClick={handleRefill}
                   className="w-full py-3.5 px-4 btn-3d-blue rounded-2xl font-black text-base flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <Gem className="w-5 h-5 fill-white" />
-                  Recarregar 5 Vidas (100 Gemas)
+                  Recarregar 10 Vidas (100 Gemas)
                 </button>
               )}
 
@@ -163,6 +185,12 @@ export const Header: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Mailbox Modal */}
+      <MailboxModal
+        isOpen={showMailboxModal}
+        onClose={() => setShowMailboxModal(false)}
+      />
     </>
   );
 };

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import type { AuthUserProfile } from '../services/auth';
+import type { AuthUserProfile, CoupleInvite } from '../services/auth';
 import { getRegisteredUsers, saveRegisteredUser } from '../services/auth';
 import {
   supabase,
@@ -7,7 +7,13 @@ import {
   signOutSupabase,
   fetchRealtimeLeaderboard,
   fetchUserProfileByEmail,
+  sendCoupleInviteToSupabase,
+  acceptCoupleInviteInSupabase,
+  removeCoupleInviteInSupabase,
+  clearCouplePartnerInSupabase,
 } from '../services/supabase';
+import confetti from 'canvas-confetti';
+import { sound } from '../utils/audio';
 
 export interface CoupleStats {
   sharedStreak: number;
@@ -24,9 +30,15 @@ interface UserContextType {
   partner: AuthUserProfile | null;
   isAuthenticated: boolean;
   coupleStats: CoupleStats;
+  incomingInvites: CoupleInvite[];
+  sentInvite: CoupleInvite | null;
   loginUser: (email: string, name: string, avatar?: string, id?: string) => void;
   logout: () => void;
   linkPartnerCode: (codeOrEmail: string) => Promise<{ success: boolean; message: string }>;
+  sendCoupleInvite: (codeOrEmail: string) => Promise<{ success: boolean; message: string }>;
+  acceptCoupleInvite: (invite: CoupleInvite) => Promise<{ success: boolean; message: string }>;
+  declineCoupleInvite: (inviteId: string) => Promise<void>;
+  cancelSentInvite: () => Promise<void>;
   unlinkPartner: () => void;
   completeLesson: (lessonId: string, xpGained: number) => void;
   loseHeart: () => void;
@@ -52,12 +64,22 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed.id === 'string' && (!parsed.id.includes('-') || parsed.id.length < 32)) {
-          parsed.id = crypto.randomUUID();
-        }
-        if (parsed?.id) {
-          const cleanIdPart = parsed.id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase();
-          parsed.coupleCode = `PACOCA-${cleanIdPart || '7777'}`;
+        if (parsed) {
+          if (!parsed.maxHearts || parsed.maxHearts < 10) {
+            parsed.maxHearts = 10;
+            parsed.hearts = 10;
+          }
+          const today = getTodayString();
+          if (parsed.lastActiveDate !== today && parsed.hearts < 10) {
+            parsed.hearts = 10;
+          }
+          if (typeof parsed.id === 'string' && (!parsed.id.includes('-') || parsed.id.length < 32)) {
+            parsed.id = crypto.randomUUID();
+          }
+          if (parsed?.id) {
+            const cleanIdPart = parsed.id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase();
+            parsed.coupleCode = `PACOCA-${cleanIdPart || '7777'}`;
+          }
         }
         localStorage.setItem('pacoca_current_user_v3', JSON.stringify(parsed));
         return parsed;
@@ -285,6 +307,10 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const deterministicCode = `PACOCA-${cleanIdPart || '7777'}`;
 
     if (existing) {
+      if (!existing.maxHearts || existing.maxHearts < 10) {
+        existing.maxHearts = 10;
+        existing.hearts = 10;
+      }
       // Existing user: preserve their real progress and ensure valid UUID id
       const updatedExisting: AuthUserProfile = {
         ...existing,
@@ -302,8 +328,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         email: cleanEmail,
         avatar: avatar || './mascot/mascoteoficial.png',
         xp: 0,                   // ZERO XP
-        hearts: 5,               // 5 Hearts
-        maxHearts: 5,
+        hearts: 10,              // 10 Hearts
+        maxHearts: 10,
         diamonds: 0,             // ZERO Gems
         streak: 0,               // ZERO Streak
         lastActiveDate: getTodayString(),
@@ -360,33 +386,44 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCurrentUser(null);
   };
 
-  const linkPartnerCode = async (codeOrEmail: string): Promise<{ success: boolean; message: string }> => {
+  const sendCoupleInvite = async (codeOrEmail: string): Promise<{ success: boolean; message: string }> => {
     const clean = codeOrEmail.trim().toLowerCase();
     if (!clean || !currentUser) {
       return { success: false, message: 'Digite um código ou e-mail válido.' };
     }
 
     if (clean === currentUser.email.toLowerCase() || clean === currentUser.coupleCode?.toLowerCase()) {
-      return { success: false, message: 'Você não pode vincular seu próprio código a você mesmo!' };
+      return { success: false, message: 'Você não pode enviar um convite para você mesmo!' };
     }
 
-    // 1. Try to find the partner in allLearners
-    let matched = allLearners.find((u) => {
+    // 1. Check if target user already sent us an invite -> auto accept!
+    const existingIncoming = (currentUser.incomingInvites || []).find((inv) => {
+      const fromC = (inv.fromCode || '').toLowerCase();
+      return (
+        inv.fromEmail.toLowerCase() === clean ||
+        fromC === clean ||
+        fromC.replace('pacoca-', '') === clean.replace('pacoca-', '')
+      );
+    });
+    if (existingIncoming) {
+      return await acceptCoupleInvite(existingIncoming);
+    }
+
+    // 2. Find target in allLearners or Supabase
+    let target = allLearners.find((u) => {
       if (u.id === currentUser.id || u.email.toLowerCase() === currentUser.email.toLowerCase()) return false;
       const uCode = (u.coupleCode || `PACOCA-${u.id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase()}`).toLowerCase();
       if (uCode === clean || uCode.replace('pacoca-', '') === clean.replace('pacoca-', '')) return true;
       if (u.email.toLowerCase() === clean) return true;
-      if (u.name.toLowerCase().includes(clean)) return true;
       return false;
     });
 
-    // 2. If not found in allLearners, query Supabase directly by email or ID prefix
-    if (!matched && supabase) {
+    if (!target && supabase) {
       try {
         if (clean.includes('@')) {
           const remote = await fetchUserProfileByEmail(clean);
           if (remote && remote.email.toLowerCase() !== currentUser.email.toLowerCase()) {
-            matched = remote;
+            target = remote;
             setAllLearners((prev) => [remote, ...prev.filter((p) => p.id !== remote.id)]);
           }
         } else {
@@ -401,14 +438,14 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (data && data.email.toLowerCase() !== currentUser.email.toLowerCase()) {
               const today = getTodayString();
               const cleanIdPart = (data.id || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase();
-              matched = {
+              target = {
                 id: data.id,
                 name: data.full_name || 'Aluno',
                 email: data.email,
                 avatar: data.avatar_url || './mascot/mascoteoficial.png',
                 xp: data.total_xp ?? 0,
-                hearts: data.hearts ?? 5,
-                maxHearts: 5,
+                hearts: 10,
+                maxHearts: 10,
                 diamonds: 100,
                 streak: data.streak_count ?? 0,
                 lastActiveDate: data.last_activity_date || '',
@@ -418,7 +455,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 placementCompleted: data.placement_completed || false,
                 coupleCode: `PACOCA-${cleanIdPart || '7777'}`,
               };
-              setAllLearners((prev) => [matched!, ...prev.filter((p) => p.id !== matched!.id)]);
+              setAllLearners((prev) => [target!, ...prev.filter((p) => p.id !== target!.id)]);
             }
           }
         }
@@ -427,30 +464,182 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    if (!matched) {
+    if (!target) {
       return {
         success: false,
-        message: 'Nenhum aluno encontrado com este código ou e-mail. Peça para seu parceiro(a) entrar no app pelo menos uma vez!',
+        message: 'Nenhum aluno encontrado com este código ou e-mail. Peça para seu amor entrar no app pelo menos uma vez!',
       };
     }
 
+    const newInvite: CoupleInvite = {
+      id: `inv_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      fromEmail: currentUser.email,
+      fromName: currentUser.name,
+      fromAvatar: currentUser.avatar,
+      fromCode: currentUser.coupleCode || '',
+      toEmail: target.email,
+      createdAt: Date.now(),
+      status: 'pending',
+    };
+
+    // Save invite to target in Supabase
+    await sendCoupleInviteToSupabase(target.email, newInvite);
+
+    // Save sent invite locally
+    const updated = {
+      ...currentUser,
+      sentInvite: newInvite,
+    };
+    setCurrentUser(updated);
+    saveRegisteredUser(updated);
+
+    // Broadcast Realtime notification
+    if (supabase) {
+      const channel = supabase.channel('pacoca_couple_invites');
+      channel.subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          channel.send({
+            type: 'broadcast',
+            event: 'invite_sent',
+            payload: newInvite,
+          });
+        }
+      });
+    }
+
+    sound.playSuccess();
+    return {
+      success: true,
+      message: `Convite de casal enviado com sucesso para ${target.name}! Ele(a) verá o convite no Correio para aceitar.`,
+    };
+  };
+
+  const acceptCoupleInvite = async (invite: CoupleInvite): Promise<{ success: boolean; message: string }> => {
+    if (!currentUser) return { success: false, message: 'Usuário não autenticado.' };
+
+    const remaining = (currentUser.incomingInvites || []).filter((inv) => inv.id !== invite.id);
     const updatedUser = {
       ...currentUser,
-      partnerCode: matched.coupleCode || matched.email,
+      partnerCode: invite.fromCode || invite.fromEmail,
+      incomingInvites: remaining,
     };
     setCurrentUser(updatedUser);
     saveRegisteredUser(updatedUser);
-    return { success: true, message: `Parceiro(a) ${matched.name} vinculado(a) com sucesso!` };
+
+    // 2-way sync: update both users in Supabase so BOTH are linked!
+    await acceptCoupleInviteInSupabase(
+      currentUser.email,
+      currentUser.coupleCode || '',
+      invite.fromEmail,
+      invite.fromCode
+    );
+
+    // Broadcast to the sender that the invite was accepted in real time
+    if (supabase) {
+      const channel = supabase.channel('pacoca_couple_invites');
+      channel.subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          channel.send({
+            type: 'broadcast',
+            event: 'invite_accepted',
+            payload: {
+              fromEmail: currentUser.email,
+              fromName: currentUser.name,
+              fromCode: currentUser.coupleCode,
+              fromAvatar: currentUser.avatar,
+              toEmail: invite.fromEmail,
+            },
+          });
+        }
+      });
+    }
+
+    sound.playVictory();
+    confetti({
+      particleCount: 90,
+      spread: 80,
+      origin: { y: 0.6 },
+    });
+
+    refreshLeaderboard();
+    return {
+      success: true,
+      message: `Convite aceito! Você e ${invite.fromName} agora são parceiros e estão sincronizados!`,
+    };
   };
 
-  const unlinkPartner = () => {
+  const declineCoupleInvite = async (inviteId: string) => {
     if (!currentUser) return;
+    const inv = (currentUser.incomingInvites || []).find((i) => i.id === inviteId);
+    const remaining = (currentUser.incomingInvites || []).filter((i) => i.id !== inviteId);
+    const updatedUser = {
+      ...currentUser,
+      incomingInvites: remaining,
+    };
+    setCurrentUser(updatedUser);
+    saveRegisteredUser(updatedUser);
+    await removeCoupleInviteInSupabase(currentUser.email, inviteId);
+
+    if (inv && supabase) {
+      const channel = supabase.channel('pacoca_couple_invites');
+      channel.subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          channel.send({
+            type: 'broadcast',
+            event: 'invite_declined',
+            payload: {
+              toEmail: inv.fromEmail,
+              fromEmail: currentUser.email,
+            },
+          });
+        }
+      });
+    }
+  };
+
+  const cancelSentInvite = async () => {
+    if (!currentUser || !currentUser.sentInvite) return;
+    const targetEmail = currentUser.sentInvite.toEmail;
+    const inviteId = currentUser.sentInvite.id;
+    const updatedUser = {
+      ...currentUser,
+      sentInvite: null,
+    };
+    setCurrentUser(updatedUser);
+    saveRegisteredUser(updatedUser);
+    await removeCoupleInviteInSupabase(targetEmail, inviteId);
+  };
+
+  const linkPartnerCode = async (codeOrEmail: string): Promise<{ success: boolean; message: string }> => {
+    return await sendCoupleInvite(codeOrEmail);
+  };
+
+  const unlinkPartner = async () => {
+    if (!currentUser) return;
+    const oldPartner = currentUser.partnerCode;
     const updatedUser = {
       ...currentUser,
       partnerCode: undefined,
     };
     setCurrentUser(updatedUser);
     saveRegisteredUser(updatedUser);
+    await clearCouplePartnerInSupabase(currentUser.email, oldPartner);
+
+    if (supabase) {
+      const channel = supabase.channel('pacoca_couple_invites');
+      channel.subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          channel.send({
+            type: 'broadcast',
+            event: 'partner_unlinked',
+            payload: {
+              toEmail: partner?.email || oldPartner,
+              fromEmail: currentUser.email,
+            },
+          });
+        }
+      });
+    }
   };
 
   const completeLesson = (lessonId: string, xpGained: number) => {
@@ -583,6 +772,83 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // Real-time listener for couple invites across devices
+  useEffect(() => {
+    if (!supabase || !currentUser) return;
+    const currentSupabase = supabase;
+    const myEmail = currentUser.email.toLowerCase();
+
+    const inviteChannel = currentSupabase
+      .channel('pacoca_couple_invites')
+      .on('broadcast', { event: 'invite_sent' }, ({ payload }) => {
+        if (!payload) return;
+        const targetEmail = (payload.toEmail || '').toLowerCase();
+        if (targetEmail === myEmail) {
+          sound.playSuccess();
+          setCurrentUser((prev) => {
+            if (!prev) return null;
+            const existing = (prev.incomingInvites || []).filter((inv) => inv.id !== payload.id);
+            return {
+              ...prev,
+              incomingInvites: [payload, ...existing],
+            };
+          });
+        }
+      })
+      .on('broadcast', { event: 'invite_accepted' }, ({ payload }) => {
+        if (!payload) return;
+        const targetEmail = (payload.toEmail || '').toLowerCase();
+        if (targetEmail === myEmail) {
+          sound.playVictory();
+          confetti({
+            particleCount: 90,
+            spread: 80,
+            origin: { y: 0.6 },
+          });
+          setCurrentUser((prev) => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              partnerCode: payload.fromCode || payload.fromEmail,
+              sentInvite: null,
+            };
+          });
+          refreshLeaderboard();
+        }
+      })
+      .on('broadcast', { event: 'invite_declined' }, ({ payload }) => {
+        if (!payload) return;
+        const targetEmail = (payload.toEmail || '').toLowerCase();
+        if (targetEmail === myEmail) {
+          setCurrentUser((prev) => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              sentInvite: null,
+            };
+          });
+        }
+      })
+      .on('broadcast', { event: 'partner_unlinked' }, ({ payload }) => {
+        if (!payload) return;
+        const targetEmail = (payload.toEmail || '').toLowerCase();
+        if (targetEmail === myEmail) {
+          setCurrentUser((prev) => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              partnerCode: undefined,
+            };
+          });
+        }
+      })
+      .subscribe();
+
+    return () => {
+      currentSupabase.removeChannel(inviteChannel);
+    };
+  }, [currentUser?.email]);
+
   const clearNudge = () => {
     setCoupleStats((prev) => ({
       ...prev,
@@ -640,9 +906,15 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         partner,
         isAuthenticated: Boolean(currentUser),
         coupleStats,
+        incomingInvites: currentUser?.incomingInvites || [],
+        sentInvite: currentUser?.sentInvite || null,
         loginUser,
         logout,
         linkPartnerCode,
+        sendCoupleInvite,
+        acceptCoupleInvite,
+        declineCoupleInvite,
+        cancelSentInvite,
         unlinkPartner,
         completeLesson,
         loseHeart,
