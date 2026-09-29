@@ -79,10 +79,38 @@ export async function syncUserProfile(profile: AuthUserProfile) {
       ? profile.id
       : crypto.randomUUID();
 
+  let partnerCode = profile.partnerCode;
+  let incomingInvites = profile.incomingInvites || [];
+  let sentInvite = profile.sentInvite;
+
+  // Safeguard: Check if remote has existing invites or partner so local sync does not overwrite them
+  try {
+    const { data: existingRow } = await supabase
+      .from('profiles')
+      .select('avatar_url')
+      .eq('email', profile.email.toLowerCase().trim())
+      .maybeSingle();
+
+    if (existingRow?.avatar_url) {
+      const { meta } = parseAvatarWithMeta(existingRow.avatar_url);
+      if (incomingInvites.length === 0 && meta.incomingInvites && meta.incomingInvites.length > 0) {
+        incomingInvites = meta.incomingInvites;
+      }
+      if (!partnerCode && meta.partnerCode) {
+        partnerCode = meta.partnerCode;
+      }
+      if (sentInvite === undefined && meta.sentInvite) {
+        sentInvite = meta.sentInvite;
+      }
+    }
+  } catch (err) {
+    console.warn('Could not read existing remote metadata:', err);
+  }
+
   const serializedAvatar = serializeAvatarWithMeta(profile.avatar, {
-    partnerCode: profile.partnerCode,
-    incomingInvites: profile.incomingInvites,
-    sentInvite: profile.sentInvite,
+    partnerCode,
+    incomingInvites,
+    sentInvite,
   });
 
   try {

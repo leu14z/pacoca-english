@@ -136,11 +136,75 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           return updated;
         });
+
+        // Also update currentUser with latest remote invites or partnerCode
+        if (currentUser) {
+          const currentEmail = currentUser.email.toLowerCase();
+          const currentId = currentUser.id;
+          const myRemote = remoteUsers.find((r) => r.id === currentId || r.email.toLowerCase() === currentEmail);
+          if (myRemote) {
+            const remoteInvites = myRemote.incomingInvites || [];
+            const prevInvites = currentUser.incomingInvites || [];
+            const invitesChanged = JSON.stringify(remoteInvites) !== JSON.stringify(prevInvites);
+            const partnerChanged = myRemote.partnerCode !== currentUser.partnerCode;
+            const sentChanged = JSON.stringify(myRemote.sentInvite) !== JSON.stringify(currentUser.sentInvite);
+
+            if (invitesChanged || partnerChanged || sentChanged) {
+              setCurrentUser((prev) => {
+                if (!prev) return null;
+                return {
+                  ...prev,
+                  partnerCode: myRemote.partnerCode !== undefined ? myRemote.partnerCode : prev.partnerCode,
+                  incomingInvites: remoteInvites,
+                  sentInvite: myRemote.sentInvite !== undefined ? myRemote.sentInvite : prev.sentInvite,
+                };
+              });
+            }
+          }
+        }
       }
     } catch (err) {
       console.warn('Erro ao atualizar ranking em tempo real:', err);
     }
   };
+
+  // Active hydration of currentUser from Supabase to catch incoming invites & partner updates
+  useEffect(() => {
+    if (!currentUser?.email || !supabase) return;
+    const email = currentUser.email.toLowerCase().trim();
+
+    const fetchMyRemoteState = async () => {
+      try {
+        const remote = await fetchUserProfileByEmail(email);
+        if (remote) {
+          setCurrentUser((prev) => {
+            if (!prev) return null;
+            const remoteInvites = remote.incomingInvites || [];
+            const prevInvites = prev.incomingInvites || [];
+            const invitesChanged = JSON.stringify(remoteInvites) !== JSON.stringify(prevInvites);
+            const partnerChanged = remote.partnerCode !== prev.partnerCode;
+            const sentChanged = JSON.stringify(remote.sentInvite) !== JSON.stringify(prev.sentInvite);
+
+            if (invitesChanged || partnerChanged || sentChanged) {
+              return {
+                ...prev,
+                partnerCode: remote.partnerCode !== undefined ? remote.partnerCode : prev.partnerCode,
+                incomingInvites: remoteInvites,
+                sentInvite: remote.sentInvite !== undefined ? remote.sentInvite : prev.sentInvite,
+              };
+            }
+            return prev;
+          });
+        }
+      } catch (err) {
+        console.warn('Erro ao sincronizar dados remotos do usuário:', err);
+      }
+    };
+
+    fetchMyRemoteState();
+    const interval = setInterval(fetchMyRemoteState, 3000);
+    return () => clearInterval(interval);
+  }, [currentUser?.email]);
 
   // Sync currentUser to localStorage and to global registry
   useEffect(() => {
