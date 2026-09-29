@@ -93,6 +93,9 @@ export async function fetchUserProfileByEmail(email: string): Promise<AuthUserPr
 
     if (error || !data) return null;
 
+    const today = new Date().toISOString().split('T')[0];
+    const cleanIdPart = (data.id || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase();
+
     return {
       id: data.id,
       name: data.full_name || 'Aluno',
@@ -105,9 +108,10 @@ export async function fetchUserProfileByEmail(email: string): Promise<AuthUserPr
       streak: data.streak_count ?? 0,
       lastActiveDate: data.last_activity_date || '',
       completedLessons: [],
-      completedToday: false,
+      completedToday: data.last_activity_date === today,
       level: data.level || 'A1',
       placementCompleted: data.placement_completed || false,
+      coupleCode: `PACOCA-${cleanIdPart || '7777'}`,
     };
   } catch (err) {
     console.warn('Supabase fetch profile error:', err);
@@ -150,24 +154,30 @@ export async function fetchRealtimeLeaderboard(): Promise<AuthUserProfile[]> {
 
     if (error || !data) return [];
 
+    const today = new Date().toISOString().split('T')[0];
+
     return data
       .filter((row: any) => row.email && row.full_name)
-      .map((row: any) => ({
-        id: row.id,
-        name: row.full_name,
-        email: row.email,
-        avatar: row.avatar_url || './mascot/mascoteoficial.png',
-        xp: row.total_xp ?? 0,
-        hearts: row.hearts ?? 5,
-        maxHearts: 5,
-        diamonds: 100,
-        streak: row.streak_count ?? 0,
-        lastActiveDate: row.last_activity_date || '',
-        completedLessons: [],
-        completedToday: false,
-        level: row.level || 'A1',
-        placementCompleted: row.placement_completed || false,
-      }));
+      .map((row: any) => {
+        const cleanIdPart = (row.id || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase();
+        return {
+          id: row.id,
+          name: row.full_name,
+          email: row.email,
+          avatar: row.avatar_url || './mascot/mascoteoficial.png',
+          xp: row.total_xp ?? 0,
+          hearts: row.hearts ?? 5,
+          maxHearts: 5,
+          diamonds: 100,
+          streak: row.streak_count ?? 0,
+          lastActiveDate: row.last_activity_date || '',
+          completedLessons: [],
+          completedToday: row.last_activity_date === today,
+          level: row.level || 'A1',
+          placementCompleted: row.placement_completed || false,
+          coupleCode: `PACOCA-${cleanIdPart || '7777'}`,
+        };
+      });
   } catch (err) {
     console.warn('Supabase leaderboard fetch error:', err);
     return [];

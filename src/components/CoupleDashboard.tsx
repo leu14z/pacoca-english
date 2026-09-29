@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
-import { Heart, Send, CheckCircle2, MessageSquareHeart, Copy, Link2, Check, Flame } from 'lucide-react';
+import { Heart, Send, CheckCircle2, MessageSquareHeart, Copy, Link2, Check, Flame, Unlink, AlertCircle } from 'lucide-react';
 import { useUser } from '../context/UserContext';
 import { Mascot } from './Mascot';
 import { sound } from '../utils/audio';
 
 export const CoupleDashboard: React.FC = () => {
-  const { currentUser, partner, coupleStats, sendCoupleNudge, clearNudge, linkPartnerCode } = useUser();
+  const { currentUser, partner, coupleStats, sendCoupleNudge, clearNudge, linkPartnerCode, unlinkPartner } = useUser();
   const [partnerCodeInput, setPartnerCodeInput] = useState('');
   const [codeCopied, setCodeCopied] = useState(false);
-  const [linkSuccess, setLinkSuccess] = useState(false);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [nudgeSent, setNudgeSent] = useState(false);
 
   if (!currentUser) return null;
@@ -37,13 +37,23 @@ export const CoupleDashboard: React.FC = () => {
   const handleLinkPartner = (e: React.FormEvent) => {
     e.preventDefault();
     if (!partnerCodeInput.trim()) return;
-    const ok = linkPartnerCode(partnerCodeInput);
-    if (ok) {
+    const res = linkPartnerCode(partnerCodeInput);
+    if (res.success) {
       sound.playSuccess();
-      setLinkSuccess(true);
+      setFeedback({ type: 'success', message: res.message });
       setPartnerCodeInput('');
-      setTimeout(() => setLinkSuccess(false), 3000);
+    } else {
+      sound.playError();
+      setFeedback({ type: 'error', message: res.message });
     }
+    setTimeout(() => setFeedback(null), 5000);
+  };
+
+  const handleUnlink = () => {
+    sound.playClick();
+    unlinkPartner();
+    setFeedback({ type: 'success', message: 'Parceiro desvinculado com sucesso.' });
+    setTimeout(() => setFeedback(null), 3000);
   };
 
   const bothDone = currentUser.completedToday && (partner?.completedToday || false);
@@ -162,43 +172,77 @@ export const CoupleDashboard: React.FC = () => {
           </div>
 
           {partner ? (
-            <div className="flex items-center gap-3.5">
-              <img
-                src={partner.avatar || './mascot/certinho.png'}
-                alt={partner.name}
-                className="w-14 h-14 rounded-2xl bg-rose-50 p-1 border-2 border-slate-200 object-contain shadow-2xs"
-              />
-              <div>
-                <h3 className="font-black text-lg text-slate-800">{partner.name}</h3>
-                <p className="text-xs text-slate-400 font-bold">
-                  {partner.xp} XP • {partner.streak} dias de ofensiva
-                </p>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3.5">
+                  <img
+                    src={partner.avatar || './mascot/certinho.png'}
+                    alt={partner.name}
+                    className="w-14 h-14 rounded-2xl bg-rose-50 p-1 border-2 border-slate-200 object-contain shadow-2xs"
+                  />
+                  <div>
+                    <h3 className="font-black text-lg text-slate-800">{partner.name}</h3>
+                    <p className="text-xs text-slate-400 font-bold">
+                      {partner.xp} XP • {partner.streak} dias de ofensiva
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleUnlink}
+                  className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-xs font-black border border-rose-200 flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                  title="Desvincular parceiro"
+                >
+                  <Unlink className="w-3.5 h-3.5" /> Desvincular
+                </button>
               </div>
+
+              {feedback && (
+                <div
+                  className={`p-3 rounded-xl text-xs font-bold flex items-center gap-2 ${
+                    feedback.type === 'success'
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                      : 'bg-rose-50 text-rose-700 border border-rose-200'
+                  }`}
+                >
+                  {feedback.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+                  <span>{feedback.message}</span>
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-3">
               <p className="text-xs text-slate-500 font-medium">
-                Conecte o código do seu amor para sincronizar as ofensivas e mensagens!
+                Conecte o código ou e-mail do seu amor para sincronizar as ofensivas e mensagens!
               </p>
               <form onSubmit={handleLinkPartner} className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="Código do parceiro..."
+                  placeholder="Código (ex: PACOCA-XXXX) ou e-mail..."
                   value={partnerCodeInput}
-                  onChange={(e) => setPartnerCodeInput(e.target.value.toUpperCase())}
-                  className="flex-1 px-3 py-2 border-2 border-slate-200 rounded-xl font-mono text-xs uppercase font-black focus:outline-none focus:border-rose-400"
+                  onChange={(e) => setPartnerCodeInput(e.target.value)}
+                  className="flex-1 px-3 py-2 border-2 border-slate-200 rounded-xl font-bold text-xs focus:outline-none focus:border-rose-400 text-slate-800"
                 />
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white rounded-xl font-black text-xs cursor-pointer shadow-xs active:scale-95 transition-all flex items-center gap-1"
+                  className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white rounded-xl font-black text-xs cursor-pointer shadow-xs active:scale-95 transition-all flex items-center gap-1 shrink-0"
                 >
                   <Link2 className="w-3.5 h-3.5" /> Vincular
                 </button>
               </form>
-              {linkSuccess && (
-                <p className="text-xs text-emerald-600 font-bold">
-                  Parceiro vinculado com sucesso!
-                </p>
+
+              {feedback && (
+                <div
+                  className={`p-3 rounded-xl text-xs font-bold flex items-center gap-2 ${
+                    feedback.type === 'success'
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                      : 'bg-rose-50 text-rose-700 border border-rose-200'
+                  }`}
+                >
+                  {feedback.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+                  <span>{feedback.message}</span>
+                </div>
               )}
             </div>
           )}
@@ -207,15 +251,15 @@ export const CoupleDashboard: React.FC = () => {
 
       {/* Share Your Couple Code */}
       <div className="bg-white border-2 border-slate-200 border-b-6 border-b-slate-300 rounded-3xl p-6 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div>
+        <div className="space-y-1">
           <span className="text-xs font-black uppercase tracking-wider text-rose-600 block">
             Compartilhe com seu amor
           </span>
           <h3 className="font-black text-lg text-slate-800">
-            Seu Código de Conexão: <span className="font-mono text-rose-500">{currentUser.coupleCode}</span>
+            Seu Código de Conexão: <span className="font-mono text-rose-500 font-black">{currentUser.coupleCode}</span>
           </h3>
-          <p className="text-xs text-slate-400 font-medium">
-            Envie este código para sua namorada/esposa colar no app dela e sincronizarem a ofensiva.
+          <p className="text-xs text-slate-500 font-medium">
+            Seu parceiro pode digitar tanto seu código <strong className="text-slate-700">{currentUser.coupleCode}</strong> quanto seu e-mail <strong className="text-slate-700">{currentUser.email}</strong> para conectar!
           </p>
         </div>
 

@@ -26,13 +26,15 @@ interface UserContextType {
   coupleStats: CoupleStats;
   loginUser: (email: string, name: string, avatar?: string, id?: string) => void;
   logout: () => void;
-  linkPartnerCode: (code: string) => boolean;
+  linkPartnerCode: (codeOrEmail: string) => { success: boolean; message: string };
+  unlinkPartner: () => void;
   completeLesson: (lessonId: string, xpGained: number) => void;
   loseHeart: () => void;
   refillHearts: () => boolean;
   sendCoupleNudge: (message: string) => void;
   clearNudge: () => void;
   updateUserName: (newName: string) => void;
+  updateUserAvatar: (newAvatar: string) => void;
   setPlacementLevel: (level: 'A1' | 'A2' | 'B1') => void;
   refreshLeaderboard: () => Promise<void>;
   resetAllData: () => void;
@@ -51,8 +53,12 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const parsed = JSON.parse(saved);
         if (parsed && typeof parsed.id === 'string' && (!parsed.id.includes('-') || parsed.id.length < 32)) {
           parsed.id = crypto.randomUUID();
-          localStorage.setItem('pacoca_current_user_v3', JSON.stringify(parsed));
         }
+        if (parsed?.id) {
+          const cleanIdPart = parsed.id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase();
+          parsed.coupleCode = parsed.coupleCode || `PACOCA-${cleanIdPart || '7777'}`;
+        }
+        localStorage.setItem('pacoca_current_user_v3', JSON.stringify(parsed));
         return parsed;
       } catch {
         // fallback
@@ -181,14 +187,18 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Find linked partner from real registered users
   const partner = React.useMemo(() => {
     if (!currentUser?.partnerCode) return null;
+    const target = currentUser.partnerCode.trim().toLowerCase();
     return (
-      allLearners.find(
-        (u) =>
-          u.id !== currentUser.id &&
-          u.coupleCode?.toUpperCase() === currentUser.partnerCode?.toUpperCase()
-      ) || null
+      allLearners.find((u) => {
+        if (u.id === currentUser.id || u.email.toLowerCase() === currentUser.email.toLowerCase()) return false;
+        if (u.id.toLowerCase() === target) return true;
+        const uCode = (u.coupleCode || `PACOCA-${u.id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase()}`).toLowerCase();
+        if (uCode === target || uCode.replace('pacoca-', '') === target.replace('pacoca-', '')) return true;
+        if (u.email.toLowerCase() === target) return true;
+        return false;
+      }) || null
     );
-  }, [currentUser, allLearners]);
+  }, [currentUser?.partnerCode, currentUser?.id, currentUser?.email, allLearners]);
 
   // Login or Register a user (preserves stats across devices if found in Supabase)
   const loginUser = async (email: string, name: string, avatar?: string, id?: string) => {
@@ -202,9 +212,10 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         const remoteProfile = await fetchUserProfileByEmail(cleanEmail);
         if (remoteProfile) {
+          const cleanIdPart = (remoteProfile.id || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase();
           existing = {
             ...remoteProfile,
-            coupleCode: `PACOCA-${Math.floor(1000 + Math.random() * 9000)}`,
+            coupleCode: `PACOCA-${cleanIdPart || '7777'}`,
           };
         }
       } catch (err) {
@@ -217,18 +228,21 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       id ||
       (existing?.id && existing.id.includes('-') ? existing.id : crypto.randomUUID());
 
+    const cleanIdPart = safeId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase();
+    const deterministicCode = `PACOCA-${cleanIdPart || '7777'}`;
+
     if (existing) {
       // Existing user: preserve their real progress and ensure valid UUID id
       const updatedExisting: AuthUserProfile = {
         ...existing,
         id: id || safeId,
         avatar: avatar || existing.avatar,
+        coupleCode: existing.coupleCode || deterministicCode,
       };
       saveRegisteredUser(updatedExisting);
       setCurrentUser(updatedExisting);
     } else {
       // New user: START COMPLETELY ZEROED!
-      const randomCode = `PACOCA-${Math.floor(1000 + Math.random() * 9000)}`;
       const newUser: AuthUserProfile = {
         id: safeId,
         name: cleanName,
@@ -242,7 +256,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         lastActiveDate: getTodayString(),
         completedLessons: [],    // ZERO completed lessons
         completedToday: false,   // ZERO daily progress
-        coupleCode: randomCode,
+        coupleCode: deterministicCode,
       };
       saveRegisteredUser(newUser);
       setCurrentUser(newUser);
@@ -293,17 +307,50 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCurrentUser(null);
   };
 
-  const linkPartnerCode = (code: string): boolean => {
-    const cleanCode = code.trim().toUpperCase();
-    if (!cleanCode || !currentUser) return false;
+  const linkPartnerCode = (codeOrEmail: string): { success: boolean; message: string } => {
+    const clean = codeOrEmail.trim().toLowerCase();
+    if (!clean || !currentUser) {
+      return { success: false, message: 'Digite um código ou e-mail válido.' };
+    }
+
+    if (clean === currentUser.email.toLowerCase() || clean === currentUser.coupleCode?.toLowerCase()) {
+      return { success: false, message: 'Você não pode vincular seu próprio código a você mesmo!' };
+    }
+
+    // Try to find the partner in allLearners
+    const matched = allLearners.find((u) => {
+      if (u.id === currentUser.id || u.email.toLowerCase() === currentUser.email.toLowerCase()) return false;
+      const uCode = (u.coupleCode || `PACOCA-${u.id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase()}`).toLowerCase();
+      if (uCode === clean || uCode.replace('pacoca-', '') === clean.replace('pacoca-', '')) return true;
+      if (u.email.toLowerCase() === clean) return true;
+      if (u.name.toLowerCase() === clean) return true;
+      return false;
+    });
+
+    if (!matched) {
+      return {
+        success: false,
+        message: 'Nenhum aluno encontrado com este código ou e-mail. Peça para seu parceiro(a) entrar no app pelo menos uma vez!',
+      };
+    }
 
     const updatedUser = {
       ...currentUser,
-      partnerCode: cleanCode,
+      partnerCode: matched.coupleCode || matched.email,
     };
     setCurrentUser(updatedUser);
     saveRegisteredUser(updatedUser);
-    return true;
+    return { success: true, message: `Parceiro(a) ${matched.name} vinculado(a) com sucesso!` };
+  };
+
+  const unlinkPartner = () => {
+    if (!currentUser) return;
+    const updatedUser = {
+      ...currentUser,
+      partnerCode: undefined,
+    };
+    setCurrentUser(updatedUser);
+    saveRegisteredUser(updatedUser);
   };
 
   const completeLesson = (lessonId: string, xpGained: number) => {
@@ -360,16 +407,70 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return true;
   };
 
+  // Real-time listener for romantic love nudges across devices
+  useEffect(() => {
+    if (!supabase || !currentUser) return;
+    const currentSupabase = supabase;
+    const myCode = (currentUser.coupleCode || '').toLowerCase();
+    const myEmail = currentUser.email.toLowerCase();
+
+    const nudgeChannel = currentSupabase
+      .channel('pacoca_couple_nudges')
+      .on('broadcast', { event: 'nudge' }, ({ payload }) => {
+        if (!payload) return;
+        const target = (payload.toCode || '').toLowerCase();
+        if (
+          target === myCode ||
+          target === myEmail ||
+          target.replace('pacoca-', '') === myCode.replace('pacoca-', '')
+        ) {
+          setCoupleStats((prev) => ({
+            ...prev,
+            lastNudge: {
+              from: payload.fromName,
+              message: payload.message,
+              timestamp: payload.timestamp || Date.now(),
+            },
+          }));
+        }
+      })
+      .subscribe();
+
+    return () => {
+      currentSupabase.removeChannel(nudgeChannel);
+    };
+  }, [currentUser?.coupleCode, currentUser?.email]);
+
   const sendCoupleNudge = (message: string) => {
     if (!currentUser) return;
+    const newNudge = {
+      from: currentUser.name,
+      message,
+      timestamp: Date.now(),
+    };
     setCoupleStats((prev) => ({
       ...prev,
-      lastNudge: {
-        from: currentUser.name,
-        message,
-        timestamp: Date.now(),
-      },
+      lastNudge: newNudge,
     }));
+
+    if (supabase) {
+      const channel = supabase.channel('pacoca_couple_nudges');
+      channel.subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          channel.send({
+            type: 'broadcast',
+            event: 'nudge',
+            payload: {
+              toCode: currentUser.partnerCode,
+              fromName: currentUser.name,
+              fromEmail: currentUser.email,
+              message,
+              timestamp: Date.now(),
+            },
+          });
+        }
+      });
+    }
   };
 
   const clearNudge = () => {
@@ -387,6 +488,17 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     setCurrentUser(updated);
     saveRegisteredUser(updated);
+  };
+
+  const updateUserAvatar = (newAvatar: string) => {
+    if (!currentUser || !newAvatar) return;
+    const updated: AuthUserProfile = {
+      ...currentUser,
+      avatar: newAvatar,
+    };
+    setCurrentUser(updated);
+    saveRegisteredUser(updated);
+    syncUserProfile(updated);
   };
 
   const setPlacementLevel = (level: 'A1' | 'A2' | 'B1') => {
@@ -421,12 +533,14 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loginUser,
         logout,
         linkPartnerCode,
+        unlinkPartner,
         completeLesson,
         loseHeart,
         refillHearts,
         sendCoupleNudge,
         clearNudge,
         updateUserName,
+        updateUserAvatar,
         setPlacementLevel,
         refreshLeaderboard,
         resetAllData,
